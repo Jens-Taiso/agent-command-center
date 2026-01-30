@@ -1,0 +1,134 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ancestry-inspired Design System */
+:root {
+  /* Primary Colors */
+  --color-sage: #6b9b37;
+  --color-sage-dark: #5a8a2e;
+  --color-sage-light: #7fb044;
+  --color-teal: #008b8b;
+  --color-teal-dark: #006d6d;
+  --color-teal-light: #00a3a3;
+
+  /* Background Colors */
+  --color-cream: #f5f2eb;
+  --color-cream-dark: #e8e4db;
+  --color-sage-tint: #e8f5e8;
+  --color-teal-tint: #e0f2f2;
+
+  /* Text Colors */
+  --color-charcoal: #333333;
+  --color-charcoal-light: #555555;
+  --color-muted: #6b6b6b;
+
+  /* Accent Colors */
+  --color-amber: #b8860b;
+  --color-amber-light: #daa520;
+  --color-rust: #a0522d;
+  --color-error: #b91c1c;
+  --color-success: #166534;
+
+  /* Borders & Shadows */
+  --color-border: #d4cfc4;
+  --color-border-light: #e5e0d5;
+  --shadow-sm: 0 1px 2px rgba(51, 51, 51, 0.06);
+  --shadow-md: 0 4px 6px rgba(51, 51, 51, 0.08);
+  --shadow-lg: 0 10px 15px rgba(51, 51, 51, 0.1);
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-cream);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove default button styles */
+button {
+  cursor: pointer;
+}
+
+/* Focus styles for accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[role="row"]:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+/* Base body styles */
+body {
+  background-color: var(--color-cream);
+  color: var(--color-charcoal);
+}
+
+/* Custom utility classes using design system */
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors;
+    background-color: var(--color-sage);
+    color: white;
+  }
+  .btn-primary:hover {
+    background-color: var(--color-sage-dark);
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors border;
+    background-color: white;
+    border-color: var(--color-border);
+    color: var(--color-charcoal);
+  }
+  .btn-secondary:hover {
+    background-color: var(--color-cream);
+  }
+
+  .card {
+    @apply rounded-lg;
+    background-color: white;
+    border: 1px solid var(--color-border-light);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .link {
+    color: var(--color-teal);
+  }
+  .link:hover {
+    color: var(--color-teal-dark);
+  }
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
