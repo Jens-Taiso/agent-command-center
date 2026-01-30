@@ -26,6 +26,7 @@ module.exports = {
         cream: {
           DEFAULT: '#f5f2eb',
           dark: '#e8e4db',
+          darker: '#d9d4c8',
           light: '#faf8f4',
         },
         charcoal: {

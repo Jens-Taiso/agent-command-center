@@ -406,14 +406,14 @@ const AgentCommandCenter = () => {
 
   // Header Component
   const Header = () => (
-    <header className="h-14 bg-charcoal border-b border-charcoal-light flex items-center justify-between px-4" role="banner">
+    <header className="h-14 bg-cream-darker border-b border-border flex items-center justify-between px-4" role="banner">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 bg-gradient-to-br from-sage to-teal rounded-lg flex items-center justify-center">
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <span className="text-white font-semibold tracking-tight">AgentOS</span>
+        <span className="text-charcoal font-semibold tracking-tight">AgentOS</span>
       </div>
 
       <div className="flex items-center gap-6">
@@ -435,7 +435,7 @@ const AgentCommandCenter = () => {
             aria-label="Search agents and tasks"
             aria-expanded={searchResults.length > 0 || isSearching}
             aria-controls="search-results"
-            className="w-64 h-8 bg-charcoal-light border border-muted/30 rounded-lg px-3 pr-8 text-sm text-cream placeholder-muted focus:outline-none focus:border-teal"
+            className="w-64 h-8 bg-white border border-border rounded-lg px-3 pr-8 text-sm text-charcoal placeholder-muted focus:outline-none focus:border-teal"
           />
           <svg className="w-4 h-4 text-muted absolute right-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -486,7 +486,7 @@ const AgentCommandCenter = () => {
           <button
             aria-label="Quick actions menu"
             aria-haspopup="menu"
-            className="w-8 h-8 bg-sage rounded-lg flex items-center justify-center text-white font-bold hover:bg-sage-dark focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-charcoal"
+            className="w-8 h-8 bg-sage rounded-lg flex items-center justify-center text-white font-bold hover:bg-sage-dark focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-cream-dark"
           >
             <span aria-hidden="true">+</span>
           </button>
@@ -540,21 +540,21 @@ const AgentCommandCenter = () => {
 
   const MetricPill = ({ label, value, color }) => {
     const colors = {
-      sage: 'bg-sage/20 text-sage-light',
-      amber: 'bg-amber/20 text-amber-light',
-      red: 'bg-red-500/20 text-red-400',
-      muted: 'bg-muted/30 text-cream'
+      sage: 'bg-sage text-white',
+      amber: 'bg-amber text-white',
+      red: 'bg-red-600 text-white',
+      muted: 'bg-charcoal text-white'
     };
     return (
       <div className={`px-2.5 py-1 rounded-md text-xs font-medium ${colors[color]}`}>
-        <span className="opacity-70">{label}</span> <span className="ml-1">{value}</span>
+        <span className="opacity-80">{label}</span> <span className="ml-1">{value}</span>
       </div>
     );
   };
 
   // Sidebar Component
   const Sidebar = () => (
-    <aside className="w-56 bg-cream border-r border-border-light flex flex-col overflow-y-auto">
+    <aside className="w-56 bg-cream border-r border-border-light flex flex-col overflow-y-auto shadow-soft-lg z-10 relative">
       <nav className="p-3 space-y-1" aria-label="Main navigation">
         <SidebarItem
           icon="◉"
@@ -5607,7 +5607,7 @@ const AgentCommandCenter = () => {
           title="Agent Assistant"
           subtitle="Ready to help"
           placeholder="Ask about agents, projects..."
-          accentColor="emerald"
+          accentColor="sage"
           quickActions={[
             { label: 'Agent status', icon: '🤖' },
             { label: 'Create project', icon: '📁' },
