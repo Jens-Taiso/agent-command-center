@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ChatPanel from './ChatPanel';
 
 const AgentCommandCenter = () => {
   const [currentView, setCurrentView] = useState('command-center');
@@ -579,8 +580,8 @@ const AgentCommandCenter = () => {
               onClick={() => { setSelectedProject(project); setCurrentView('project-dashboard'); setSelectedAgent(null); }}
               className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors ${
                 selectedProject?.id === project.id && (currentView === 'project-dashboard' || currentView === 'project-edit')
-                  ? 'bg-sage-tint text-charcoal'
-                  : 'text-charcoal-light hover:bg-cream-dark'
+                  ? 'bg-cream-dark text-charcoal font-medium'
+                  : 'text-charcoal-light hover:bg-cream-dark/50'
               }`}
             >
               <span>{project.name}</span>
@@ -711,7 +712,7 @@ const AgentCommandCenter = () => {
     <button
       onClick={onClick}
       className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors ${
-        active ? 'bg-sage-tint text-charcoal font-medium' : 'text-charcoal-light hover:bg-cream-dark'
+        active ? 'bg-cream-dark text-charcoal font-medium' : 'text-charcoal-light hover:bg-cream-dark/50'
       }`}
     >
       <span className="flex items-center gap-2">
@@ -728,7 +729,7 @@ const AgentCommandCenter = () => {
 
   // Command Center View
   const CommandCenterView = () => (
-    <div className="flex-1 p-6 overflow-auto bg-cream">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-5xl">
         <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">Command Center</h1>
 
@@ -923,7 +924,7 @@ const AgentCommandCenter = () => {
 
   // Inbox View
   const InboxView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-3xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Inbox</h1>
@@ -1099,7 +1100,7 @@ const AgentCommandCenter = () => {
     const dayMap = { 'M': 0, 'T': 1, 'W': 2, 'Th': 3, 'F': 4, 'Sa': 5, 'Su': 6 };
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-6xl">
           <div className="flex items-center justify-between mb-6">
             <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Schedule</h1>
@@ -1197,7 +1198,7 @@ const AgentCommandCenter = () => {
 
   // Team View
   const TeamView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-5xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Team</h1>
@@ -1357,7 +1358,7 @@ const AgentCommandCenter = () => {
 
   // Reports View
   const ReportsView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-6xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Reports</h1>
@@ -1562,7 +1563,7 @@ const AgentCommandCenter = () => {
 
   // Activity View
   const ActivityView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-4xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Activity</h1>
@@ -1634,7 +1635,7 @@ const AgentCommandCenter = () => {
 
   // Tools View (Connected Tools)
   const ToolsView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-4xl">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -1725,7 +1726,7 @@ const AgentCommandCenter = () => {
     const categories = [...new Set(availableTools.map(t => t.category))];
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-4xl">
           <button
             onClick={() => setCurrentView('tools')}
@@ -1812,7 +1813,7 @@ const AgentCommandCenter = () => {
 
   // Tool Setup View (for new connections)
   const ToolSetupView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-2xl">
         <button 
           onClick={() => setCurrentView('tools-add')}
@@ -1961,7 +1962,7 @@ const AgentCommandCenter = () => {
     ];
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-3xl">
           <button
             onClick={() => setCurrentView('tools')}
@@ -2106,7 +2107,7 @@ const AgentCommandCenter = () => {
 
   // Project View
   const ProjectView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-5xl">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -2229,7 +2230,7 @@ const AgentCommandCenter = () => {
 
   // Agent Detail View
   const AgentDetailView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-4xl">
         <button
           onClick={() => setCurrentView('project')}
@@ -2458,7 +2459,7 @@ const AgentCommandCenter = () => {
     };
 
     return (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-6xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Performance Dashboard</h1>
@@ -2690,7 +2691,7 @@ const AgentCommandCenter = () => {
     const avgCostPerTask = totalTasks > 0 ? (totalSpend / totalTasks).toFixed(2) : '0.00';
 
     return (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-6xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Cost & Efficiency</h1>
@@ -2861,7 +2862,7 @@ const AgentCommandCenter = () => {
     const revisionRate = 100 - avgApprovalRate;
 
     return (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-6xl">
         <div className="flex items-center justify-between mb-6">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Quality Metrics</h1>
@@ -3036,7 +3037,7 @@ const AgentCommandCenter = () => {
     const [compareAgent2, setCompareAgent2] = useState(allTeamMembers.agents[1]);
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-4xl">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">Agent Comparisons</h1>
 
@@ -3164,7 +3165,7 @@ const AgentCommandCenter = () => {
     ];
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-4xl">
           <div className="flex items-center justify-between mb-6">
             <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Alerts</h1>
@@ -3248,7 +3249,7 @@ const AgentCommandCenter = () => {
     });
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-2xl">
           <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">SLAs & Thresholds</h1>
 
@@ -3420,7 +3421,7 @@ const AgentCommandCenter = () => {
 
   // Export & Integrations View (Settings)
   const ExportSettingsView = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-2xl">
         <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">Export & Integrations</h1>
 
@@ -3624,7 +3625,7 @@ const AgentCommandCenter = () => {
     };
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-3xl mx-auto">
           <button onClick={() => setCurrentView('command-center')} className="text-sm text-muted hover:text-charcoal mb-4 flex items-center gap-1">
             ← Cancel
@@ -4026,7 +4027,7 @@ const AgentCommandCenter = () => {
   // Old wizard steps removed - ProjectWizard now handles all steps internally
   // The following placeholder will be deleted:
   const _UnusedWizardStep2 = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-3xl mx-auto">
         <button
           onClick={() => setCurrentView('command-center')}
@@ -4131,7 +4132,7 @@ const AgentCommandCenter = () => {
 
   // Project Wizard - Step 3: Define SOPs
   const ProjectWizardStep3 = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-3xl mx-auto">
         <button
           onClick={() => setCurrentView('command-center')}
@@ -4210,7 +4211,7 @@ const AgentCommandCenter = () => {
 
   // Project Wizard - Step 4: Connect Tools
   const ProjectWizardStep4 = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-3xl mx-auto">
         <button
           onClick={() => setCurrentView('command-center')}
@@ -4336,7 +4337,7 @@ const AgentCommandCenter = () => {
 
   // Project Wizard - Step 5: Assign People
   const ProjectWizardStep5 = () => (
-    <div className="flex-1 p-6 overflow-auto">
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-3xl mx-auto">
         <button
           onClick={() => setCurrentView('command-center')}
@@ -4475,7 +4476,7 @@ const AgentCommandCenter = () => {
     };
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-4xl mx-auto">
           <button
             onClick={() => setCurrentView('command-center')}
@@ -4705,7 +4706,7 @@ const AgentCommandCenter = () => {
     };
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-3xl mx-auto">
           <button
             onClick={() => setCurrentView('command-center')}
@@ -4886,7 +4887,7 @@ const AgentCommandCenter = () => {
     ];
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-6xl">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
@@ -5165,7 +5166,7 @@ const AgentCommandCenter = () => {
     ];
 
     return (
-      <div className="flex-1 p-6 overflow-auto">
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
         <div className="max-w-4xl">
           <button
             onClick={() => {
@@ -5602,6 +5603,18 @@ const AgentCommandCenter = () => {
         <main className="flex-1 flex flex-col overflow-hidden" role="main" aria-label="Main content">
           {renderView()}
         </main>
+        <ChatPanel
+          title="Agent Assistant"
+          subtitle="Ready to help"
+          placeholder="Ask about agents, projects..."
+          accentColor="emerald"
+          quickActions={[
+            { label: 'Agent status', icon: '🤖' },
+            { label: 'Create project', icon: '📁' },
+            { label: 'View analytics', icon: '📊' },
+          ]}
+          onSendMessage={(message) => console.log('User message:', message)}
+        />
       </div>
 
       {/* Confirmation Dialog */}
