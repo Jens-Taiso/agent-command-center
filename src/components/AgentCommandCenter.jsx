@@ -408,6 +408,146 @@ const AgentCommandCenter = () => {
   // Generate unique IDs for building blocks
   const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+  // Agent Objective Patterns - for conversational agent creation
+  const AGENT_OBJECTIVE_PATTERNS = {
+    lead_qualification: {
+      keywords: ['lead', 'qualify', 'score', 'prospect', 'inbound', 'crm', 'pipeline'],
+      suggestedName: 'Lead Qualifier',
+      suggestedInstructions: [
+        'Receive incoming lead data from CRM or web forms',
+        'Enrich lead profile with available external data',
+        'Apply scoring criteria against qualification rules',
+        'Determine qualification status (qualified, nurture, disqualify)',
+        'Route qualified leads to the appropriate sales owner'
+      ],
+      suggestedAutonomy: 'assisted',
+      suggestedTriggers: ['new-lead', 'form-submission'],
+      suggestedTools: ['salesforce', 'hubspot', 'slack'],
+      suggestedSOPs: [1]
+    },
+    outreach: {
+      keywords: ['outreach', 'email', 'send', 'campaign', 'follow-up', 'sequence', 'nurture'],
+      suggestedName: 'Outreach Sender',
+      suggestedInstructions: [
+        'Select recipients from qualified lead pool',
+        'Generate personalized email content using templates',
+        'Queue draft emails for human review if required',
+        'Send approved emails and track delivery',
+        'Monitor engagement metrics and flag responses'
+      ],
+      suggestedAutonomy: 'supervised',
+      suggestedTriggers: ['schedule-daily', 'manual'],
+      suggestedTools: ['google', 'hubspot', 'slack'],
+      suggestedSOPs: [2]
+    },
+    invoice_processing: {
+      keywords: ['invoice', 'payment', 'process', 'extract', 'validate', 'billing', 'ap'],
+      suggestedName: 'Invoice Processor',
+      suggestedInstructions: [
+        'Receive incoming invoice documents from email or uploads',
+        'Extract vendor, amount, date, and line item data',
+        'Validate extracted data against purchase orders',
+        'Flag discrepancies for human review',
+        'Route approved invoices for payment processing'
+      ],
+      suggestedAutonomy: 'assisted',
+      suggestedTriggers: ['email-received', 'schedule-daily'],
+      suggestedTools: ['quickbooks', 'google', 'slack'],
+      suggestedSOPs: [3]
+    },
+    expense_audit: {
+      keywords: ['expense', 'audit', 'review', 'policy', 'compliance', 'reimburse'],
+      suggestedName: 'Expense Auditor',
+      suggestedInstructions: [
+        'Receive submitted expense reports',
+        'Check each line item against company expense policy',
+        'Flag out-of-policy items with specific violations',
+        'Calculate reimbursement totals for compliant items',
+        'Route flagged reports to manager for review'
+      ],
+      suggestedAutonomy: 'supervised',
+      suggestedTriggers: ['schedule-weekly', 'manual'],
+      suggestedTools: ['quickbooks', 'google', 'slack'],
+      suggestedSOPs: [4]
+    },
+    ticket_triage: {
+      keywords: ['ticket', 'triage', 'support', 'customer', 'helpdesk', 'categorize', 'route'],
+      suggestedName: 'Ticket Triager',
+      suggestedInstructions: [
+        'Receive incoming support ticket from helpdesk',
+        'Analyze ticket content to determine category and urgency',
+        'Apply priority scoring based on customer tier and issue type',
+        'Assign ticket to the appropriate support queue',
+        'Send acknowledgment to customer with estimated response time'
+      ],
+      suggestedAutonomy: 'autonomous',
+      suggestedTriggers: ['new-lead', 'email-received'],
+      suggestedTools: ['zendesk', 'slack', 'notion'],
+      suggestedSOPs: [6]
+    },
+    response_drafting: {
+      keywords: ['respond', 'reply', 'draft', 'answer', 'knowledge', 'template'],
+      suggestedName: 'Response Drafter',
+      suggestedInstructions: [
+        'Analyze incoming customer ticket or inquiry',
+        'Search knowledge base for relevant articles and solutions',
+        'Draft a personalized response addressing the issue',
+        'Include relevant links and next steps',
+        'Queue response for human agent review before sending'
+      ],
+      suggestedAutonomy: 'supervised',
+      suggestedTriggers: ['manual'],
+      suggestedTools: ['zendesk', 'notion', 'slack'],
+      suggestedSOPs: [6]
+    },
+    onboarding: {
+      keywords: ['onboard', 'hire', 'new employee', 'orientation', 'document', 'checklist'],
+      suggestedName: 'Onboarding Guide',
+      suggestedInstructions: [
+        'Receive new hire notification from HR system',
+        'Generate personalized onboarding checklist based on role',
+        'Send welcome email with first-day instructions',
+        'Track document submission progress',
+        'Notify relevant stakeholders of onboarding milestones'
+      ],
+      suggestedAutonomy: 'assisted',
+      suggestedTriggers: ['manual', 'form-submission'],
+      suggestedTools: ['google', 'slack', 'notion'],
+      suggestedSOPs: [5]
+    },
+    data_sync: {
+      keywords: ['sync', 'update', 'track', 'monitor', 'report', 'dashboard', 'data'],
+      suggestedName: 'Data Sync Agent',
+      suggestedInstructions: [
+        'Connect to configured data sources on schedule',
+        'Pull latest records and compare with previous state',
+        'Identify new, modified, or deleted entries',
+        'Update target system with synchronized data',
+        'Generate sync summary report and notify team'
+      ],
+      suggestedAutonomy: 'autonomous',
+      suggestedTriggers: ['schedule-daily', 'schedule-weekly'],
+      suggestedTools: ['google', 'airtable', 'slack'],
+      suggestedSOPs: []
+    }
+  };
+
+  const matchAgentObjective = (userInput) => {
+    const input = userInput.toLowerCase();
+    let bestMatch = null;
+    let highestScore = 0;
+
+    Object.entries(AGENT_OBJECTIVE_PATTERNS).forEach(([key, pattern]) => {
+      const score = pattern.keywords.filter(kw => input.includes(kw)).length;
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = { key, ...pattern };
+      }
+    });
+
+    return bestMatch || AGENT_OBJECTIVE_PATTERNS.lead_qualification;
+  };
+
   // Standard Operating Procedures Library
   const sopLibrary = [
     { id: 1, name: 'Lead Qualification', description: 'Score and qualify incoming leads based on fit criteria', steps: 5, usedBy: 2, category: 'Sales' },
@@ -2101,7 +2241,7 @@ const AgentCommandCenter = () => {
           <button
             onClick={() => {
               setEditingAgent(null);
-              setCurrentView('agent-create');
+              setCurrentView('agent-creator-ai');
             }}
             className="px-4 py-2 bg-sage text-white text-sm font-medium rounded-lg hover:bg-sage-dark transition-colors flex items-center gap-2"
           >
@@ -3589,7 +3729,7 @@ const AgentCommandCenter = () => {
                 <button
                   onClick={() => {
                     setEditingAgent(selectedAgent);
-                    setCurrentView('agent-edit');
+                    setCurrentView('agent-creator-ai');
                   }}
                   className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-charcoal-light hover:bg-cream transition-colors"
                 >
@@ -6130,6 +6270,951 @@ const AgentCommandCenter = () => {
     );
   };
 
+  // ============================================
+  // AI AGENT CREATOR VIEW
+  // ============================================
+
+  const AIAgentCreatorView = () => {
+    const isEditMode = editingAgent !== null;
+
+    const triggerOptionsList = [
+      { id: 'new-lead', label: 'New lead arrives in CRM', icon: '📥' },
+      { id: 'schedule-daily', label: 'Scheduled (daily)', icon: '📅' },
+      { id: 'schedule-weekly', label: 'Scheduled (weekly)', icon: '📆' },
+      { id: 'manual', label: 'Manual trigger only', icon: '👆' },
+      { id: 'form-submission', label: 'On form submission', icon: '📝' },
+      { id: 'email-received', label: 'Email received', icon: '📧' }
+    ];
+
+    const [messages, setMessages] = useState(() => {
+      if (isEditMode) {
+        return [{
+          role: 'assistant',
+          content: `Here's your current configuration for **${editingAgent.name}**. Click any field in the preview to edit it, or tell me what you'd like to change.`,
+          type: 'review'
+        }];
+      }
+      return [{
+        role: 'assistant',
+        content: "Hi! I'm here to help you create a new AI agent. Describe what you want this agent to do — what task or process should it handle?",
+        type: 'greeting'
+      }];
+    });
+
+    const [inputValue, setInputValue] = useState('');
+    const [phase, setPhase] = useState(isEditMode ? 'review' : 'greeting');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [selectedOptions, setSelectedOptions] = useState([]);
+    const [toolsAndSopsSubPhase, setToolsAndSopsSubPhase] = useState('tools');
+    const messagesEndRef = useRef(null);
+
+    const [agent, setAgent] = useState(() => {
+      if (isEditMode) {
+        return {
+          name: editingAgent.name || '',
+          objective: editingAgent.objective || '',
+          autonomy: editingAgent.autonomy || 'supervised',
+          instructions: editingAgent.instructions || [''],
+          triggers: editingAgent.triggers || [],
+          tools: editingAgent.tools || [],
+          sops: editingAgent.sops || []
+        };
+      }
+      return {
+        name: '',
+        objective: '',
+        autonomy: 'supervised',
+        instructions: [],
+        triggers: [],
+        tools: [],
+        sops: []
+      };
+    });
+
+    const [editingField, setEditingField] = useState(null);
+    const [completedPhases, setCompletedPhases] = useState(
+      isEditMode ? new Set(['greeting', 'autonomy_level', 'triggers', 'tools', 'sops']) : new Set()
+    );
+    const [matchedPattern, setMatchedPattern] = useState(null);
+    const [editingSection, setEditingSection] = useState(null); // 'triggers' | 'tools' | 'sops' | null
+    const [pickerSelections, setPickerSelections] = useState([]);
+
+    useEffect(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    // Handle free-text input (greeting/objective phase)
+    const handleSendMessage = async (text) => {
+      if (!text.trim() || isProcessing) return;
+
+      setMessages(prev => [...prev, { role: 'user', content: text }]);
+      setInputValue('');
+      setIsProcessing(true);
+
+      await new Promise(r => setTimeout(r, 800));
+
+      if (phase === 'greeting') {
+        const matched = matchAgentObjective(text);
+        setMatchedPattern(matched);
+
+        setAgent({
+          name: matched.suggestedName,
+          objective: text,
+          autonomy: 'supervised',
+          instructions: matched.suggestedInstructions,
+          triggers: [],
+          tools: [],
+          sops: []
+        });
+
+        setCompletedPhases(prev => new Set([...prev, 'greeting']));
+
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `I've drafted a **${matched.suggestedName}** agent with ${matched.suggestedInstructions.length} instruction steps. You can see the preview on the right — click any field to edit it.\n\nHow much independence should this agent have?`,
+          type: 'question',
+          questionType: 'single-select',
+          options: [
+            { id: 'supervised', label: 'Supervised', icon: '👀', description: 'Human approves all agent actions' },
+            { id: 'assisted', label: 'Assisted', icon: '🤝', description: 'Agent escalates complex decisions' },
+            { id: 'autonomous', label: 'Autonomous', icon: '🚀', description: 'Agent works independently within bounds' }
+          ]
+        }]);
+
+        setPhase('autonomy_level');
+        setIsProcessing(false);
+        return;
+      }
+
+      // In review/edit mode, handle natural language change requests
+      if (phase === 'review') {
+        const lower = text.toLowerCase();
+        if (lower.includes('autonomy') || lower.includes('independence') || lower.includes('supervised') || lower.includes('assisted') || lower.includes('autonomous')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Sure, pick the new autonomy level:',
+            type: 'question',
+            questionType: 'single-select',
+            options: [
+              { id: 'supervised', label: 'Supervised', icon: '👀', description: 'Human approves all agent actions' },
+              { id: 'assisted', label: 'Assisted', icon: '🤝', description: 'Agent escalates complex decisions' },
+              { id: 'autonomous', label: 'Autonomous', icon: '🚀', description: 'Agent works independently within bounds' }
+            ]
+          }]);
+          setPhase('autonomy_level');
+        } else if (lower.includes('trigger')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Select the triggers for this agent:',
+            type: 'question',
+            questionType: 'multi-select',
+            options: triggerOptionsList.map(t => ({ ...t, description: '' }))
+          }]);
+          setSelectedOptions([...agent.triggers]);
+          setPhase('triggers');
+        } else if (lower.includes('tool')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Select the tools this agent should use:',
+            type: 'question',
+            questionType: 'multi-select',
+            options: availableTools.map(t => ({ id: t.id, label: t.name, icon: t.icon, description: t.category }))
+          }]);
+          setSelectedOptions([...agent.tools]);
+          setToolsAndSopsSubPhase('tools');
+          setPhase('tools_and_sops');
+        } else if (lower.includes('sop') || lower.includes('procedure')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Select the SOPs this agent should follow:',
+            type: 'question',
+            questionType: 'multi-select-sops',
+            options: sopLibrary.map(s => ({ id: s.id, label: s.name, icon: '📋', description: `${s.steps} steps · ${s.category}` }))
+          }]);
+          setSelectedOptions([...agent.sops]);
+          setToolsAndSopsSubPhase('sops');
+          setPhase('tools_and_sops');
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: "You can click any field in the preview to edit it directly. Or tell me specifically what you'd like to change — like \"change the autonomy level\" or \"update the triggers\".",
+            type: 'info'
+          }]);
+        }
+        setIsProcessing(false);
+        return;
+      }
+
+      setIsProcessing(false);
+    };
+
+    // Handle single-select option click
+    const handleOptionSelect = async (optionId) => {
+      if (phase === 'autonomy_level') {
+        const labels = { supervised: 'Supervised', assisted: 'Assisted', autonomous: 'Autonomous' };
+        setAgent(prev => ({ ...prev, autonomy: optionId }));
+        setCompletedPhases(prev => new Set([...prev, 'autonomy_level']));
+        setMessages(prev => [...prev, { role: 'user', content: labels[optionId] }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to triggers
+        setPhase('triggers');
+        setSelectedOptions(matchedPattern?.suggestedTriggers || []);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'What should trigger this agent to run? Select all that apply:',
+          type: 'question',
+          questionType: 'multi-select',
+          options: triggerOptionsList.map(t => ({
+            ...t,
+            description: '',
+            recommended: (matchedPattern?.suggestedTriggers || []).includes(t.id)
+          }))
+        }]);
+        setIsProcessing(false);
+
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'tools') {
+        setSelectedOptions(prev =>
+          prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+        );
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'sops') {
+        setSelectedOptions(prev =>
+          prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+        );
+      } else if (phase === 'triggers') {
+        setSelectedOptions(prev =>
+          prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+        );
+      }
+    };
+
+    // Handle multi-select confirm
+    const handleConfirmSelection = async () => {
+      if (phase === 'triggers') {
+        setAgent(prev => ({ ...prev, triggers: selectedOptions }));
+        setCompletedPhases(prev => new Set([...prev, 'triggers']));
+        const triggerNames = selectedOptions.map(id => triggerOptionsList.find(t => t.id === id)?.label || id).join(', ');
+        setMessages(prev => [...prev, { role: 'user', content: triggerNames || 'No triggers selected' }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to tools
+        setPhase('tools_and_sops');
+        setToolsAndSopsSubPhase('tools');
+        setSelectedOptions(matchedPattern?.suggestedTools || []);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Which tools should this agent have access to?',
+          type: 'question',
+          questionType: 'multi-select',
+          options: availableTools.map(t => ({
+            id: t.id,
+            label: t.name,
+            icon: t.icon,
+            description: t.category,
+            recommended: (matchedPattern?.suggestedTools || []).includes(t.id)
+          }))
+        }]);
+        setIsProcessing(false);
+
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'tools') {
+        setAgent(prev => ({ ...prev, tools: selectedOptions }));
+        setCompletedPhases(prev => new Set([...prev, 'tools']));
+        const toolNames = selectedOptions.map(id => availableTools.find(t => t.id === id)?.name || id).join(', ');
+        setMessages(prev => [...prev, { role: 'user', content: toolNames || 'No tools selected' }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to SOPs
+        setToolsAndSopsSubPhase('sops');
+        setSelectedOptions(matchedPattern?.suggestedSOPs || []);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Which SOPs should this agent follow?',
+          type: 'question',
+          questionType: 'multi-select-sops',
+          options: sopLibrary.map(s => ({
+            id: s.id,
+            label: s.name,
+            icon: '📋',
+            description: `${s.steps} steps · ${s.category}`,
+            recommended: (matchedPattern?.suggestedSOPs || []).includes(s.id)
+          }))
+        }]);
+        setIsProcessing(false);
+
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'sops') {
+        setAgent(prev => ({ ...prev, sops: selectedOptions }));
+        setCompletedPhases(prev => new Set([...prev, 'sops']));
+        const sopNames = selectedOptions.map(id => sopLibrary.find(s => s.id === id)?.name || id).join(', ');
+        setMessages(prev => [...prev, { role: 'user', content: sopNames || 'No SOPs selected' }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 800));
+
+        // Move to review
+        setPhase('review');
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `Your agent is ready! I've configured **${agent.name}** with ${agent.instructions.length} instructions.\n\nReview everything in the preview panel — click any field to edit it. When you're satisfied, hit **${isEditMode ? 'Save Changes' : 'Create Agent'}** below.`,
+          type: 'review'
+        }]);
+        setIsProcessing(false);
+      }
+    };
+
+    // Save agent
+    const handleSaveAgent = () => {
+      const agentData = {
+        ...agent,
+        id: isEditMode ? editingAgent.id : Date.now(),
+        status: isEditMode ? editingAgent.status : 'idle',
+        approvalRate: isEditMode ? editingAgent.approvalRate : 0,
+        tasksCompleted: isEditMode ? editingAgent.tasksCompleted : 0,
+        project: isEditMode ? editingAgent.project : '',
+        instructions: agent.instructions.filter(i => i.trim())
+      };
+
+      if (isEditMode) {
+        showToast(`Agent "${agentData.name}" updated successfully`, 'success');
+        setSelectedAgent(agentData);
+        setCurrentView('agent-detail');
+      } else {
+        showToast(`Agent "${agentData.name}" created successfully`, 'success');
+        setCurrentView('building-blocks-agents');
+      }
+      setEditingAgent(null);
+    };
+
+    // Inline edit handlers for preview
+    const handleInlineEdit = (field, value) => {
+      setAgent(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleInstructionEdit = (index, value) => {
+      setAgent(prev => {
+        const newInstructions = [...prev.instructions];
+        newInstructions[index] = value;
+        return { ...prev, instructions: newInstructions };
+      });
+    };
+
+    const handleAddInstruction = () => {
+      setAgent(prev => ({ ...prev, instructions: [...prev.instructions, ''] }));
+    };
+
+    const handleRemoveInstruction = (index) => {
+      if (agent.instructions.length > 1) {
+        setAgent(prev => ({ ...prev, instructions: prev.instructions.filter((_, i) => i !== index) }));
+      }
+    };
+
+    // Picker dialog handlers for editing Triggers/Tools/SOPs from preview
+    const handlePickerToggle = (id) => {
+      setPickerSelections(prev =>
+        prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+      );
+    };
+
+    const handlePickerSave = () => {
+      if (editingSection === 'triggers') {
+        setAgent(prev => ({ ...prev, triggers: pickerSelections }));
+      } else if (editingSection === 'tools') {
+        setAgent(prev => ({ ...prev, tools: pickerSelections }));
+      } else if (editingSection === 'sops') {
+        setAgent(prev => ({ ...prev, sops: pickerSelections }));
+      }
+      setEditingSection(null);
+      setPickerSelections([]);
+    };
+
+    const handlePickerClose = () => {
+      setEditingSection(null);
+      setPickerSelections([]);
+    };
+
+    const getPickerItems = () => {
+      if (editingSection === 'triggers') {
+        return triggerOptionsList.map(t => ({ id: t.id, label: t.label, icon: t.icon, description: '' }));
+      } else if (editingSection === 'tools') {
+        return availableTools.map(t => ({ id: t.id, label: t.name, icon: t.icon, description: t.category }));
+      } else if (editingSection === 'sops') {
+        return sopLibrary.map(s => ({ id: s.id, label: s.name, icon: '📋', description: `${s.steps} steps · ${s.category}` }));
+      }
+      return [];
+    };
+
+    const getPickerTitle = () => {
+      if (editingSection === 'triggers') return 'Edit Triggers';
+      if (editingSection === 'tools') return 'Edit Tools';
+      if (editingSection === 'sops') return 'Edit SOPs';
+      return '';
+    };
+
+    const quickSuggestions = [
+      'Qualify incoming sales leads',
+      'Process and validate invoices',
+      'Triage customer support tickets',
+      'Send personalized outreach emails',
+      'Track and sync pipeline data',
+      'Coordinate new hire onboarding'
+    ];
+
+    return (
+      <div className="flex-1 flex bg-cream-light overflow-hidden">
+        {/* Left Panel - Conversation */}
+        <div className="w-2/5 flex flex-col border-r border-border-light bg-white">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border-light">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setEditingAgent(null);
+                    setCurrentView('building-blocks-agents');
+                  }}
+                  className="p-1.5 text-muted hover:text-charcoal rounded-lg hover:bg-cream transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div>
+                  <h1 className="text-lg font-semibold text-charcoal">{isEditMode ? 'Edit Agent' : 'Create Agent'}</h1>
+                  <p className="text-xs text-muted">AI-assisted setup</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingAgent(null);
+                  setCurrentView(isEditMode ? 'agent-edit' : 'agent-create');
+                }}
+                className="text-xs text-muted hover:text-charcoal transition-colors"
+              >
+                Switch to manual mode →
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'assistant' ? (
+                  <div className="max-w-[90%] space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal to-sage flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs">✨</span>
+                      </div>
+                      <div className="bg-cream rounded-2xl rounded-tl-sm px-4 py-2.5">
+                        <p className="text-sm text-charcoal whitespace-pre-wrap">
+                          {msg.content.split('**').map((part, j) =>
+                            j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Single-select question */}
+                    {msg.type === 'question' && msg.questionType === 'single-select' && (
+                      <div className="ml-9 space-y-2">
+                        {msg.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleOptionSelect(opt.id)}
+                            className="w-full p-3 rounded-xl border border-border-light hover:border-teal hover:bg-teal-tint/30 text-left transition-all bg-white"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{opt.icon}</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">{opt.label}</div>
+                                <div className="text-xs text-muted">{opt.description}</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Multi-select question */}
+                    {msg.type === 'question' && (msg.questionType === 'multi-select' || msg.questionType === 'multi-select-sops') && (
+                      <div className="ml-9 space-y-2">
+                        {msg.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleOptionSelect(opt.id)}
+                            className={`w-full p-3 rounded-xl border text-left transition-all ${
+                              selectedOptions.includes(opt.id)
+                                ? 'border-teal bg-teal-tint'
+                                : 'border-border-light hover:border-border bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{opt.icon}</span>
+                                <div>
+                                  <div className="text-sm font-medium text-charcoal">
+                                    {opt.label}
+                                    {opt.recommended && (
+                                      <span className="ml-2 px-1.5 py-0.5 bg-sage-tint text-sage text-xs rounded">
+                                        Recommended
+                                      </span>
+                                    )}
+                                  </div>
+                                  {opt.description && <div className="text-xs text-muted">{opt.description}</div>}
+                                </div>
+                              </div>
+                              <span className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                selectedOptions.includes(opt.id) ? 'border-teal bg-teal' : 'border-border'
+                              }`}>
+                                {selectedOptions.includes(opt.id) && (
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                        {/* SOP Marketplace button */}
+                        {msg.questionType === 'multi-select-sops' && (
+                          <button
+                            className="w-full p-3 rounded-xl border border-dashed border-border text-left transition-all hover:border-sage hover:bg-sage-tint/20"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🏪</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">Browse SOP Marketplace</div>
+                                <div className="text-xs text-muted">Discover pre-built SOPs from the community</div>
+                              </div>
+                            </div>
+                          </button>
+                        )}
+                        <button
+                          onClick={handleConfirmSelection}
+                          className="w-full mt-2 px-4 py-2 text-sm font-medium text-white bg-teal rounded-lg hover:bg-teal-dark transition-colors"
+                        >
+                          Continue{selectedOptions.length > 0 ? ` with ${selectedOptions.length} selected` : ''}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="max-w-[80%] bg-charcoal text-white rounded-2xl rounded-br-sm px-4 py-2.5">
+                    <p className="text-sm">{msg.content}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Processing indicator */}
+            {isProcessing && (
+              <div className="flex items-center gap-2 p-3">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-muted">Thinking...</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-border-light">
+            {/* Quick suggestions at start */}
+            {phase === 'greeting' && messages.length === 1 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {quickSuggestions.map((suggestion, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setInputValue(suggestion)}
+                    className="px-3 py-1.5 text-xs bg-cream-dark rounded-full hover:bg-cream text-charcoal-light transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {phase === 'review' ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
+                    placeholder="Tell me what to change..."
+                    className="flex-1 px-4 py-2.5 text-sm border border-border-light rounded-xl focus:outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+                  />
+                  <button
+                    onClick={() => handleSendMessage(inputValue)}
+                    disabled={!inputValue.trim()}
+                    className="px-4 py-2.5 bg-charcoal-light text-white rounded-xl hover:bg-charcoal disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  onClick={handleSaveAgent}
+                  className="w-full px-4 py-3 text-sm font-medium text-white bg-sage rounded-xl hover:bg-sage-dark transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>🚀</span> {isEditMode ? 'Save Changes' : 'Create Agent'}
+                </button>
+              </div>
+            ) : phase === 'greeting' ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
+                  placeholder="Describe what this agent should do..."
+                  className="flex-1 px-4 py-2.5 text-sm border border-border-light rounded-xl focus:outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+                />
+                <button
+                  onClick={() => handleSendMessage(inputValue)}
+                  disabled={!inputValue.trim() || isProcessing}
+                  className="px-4 py-2.5 bg-teal text-white rounded-xl hover:bg-teal-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="text-center text-sm text-muted py-2">
+                Select an option above to continue
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel - Agent Preview */}
+        <div className="flex-1 p-6 overflow-y-auto relative">
+          <div className="max-w-xl mx-auto">
+            {agent.name ? (
+              <div className="space-y-4">
+                {/* Agent Header Card */}
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-teal-tint rounded-xl flex items-center justify-center flex-shrink-0">
+                      <span className="text-2xl">🤖</span>
+                    </div>
+                    <div className="flex-1">
+                      {editingField === 'name' ? (
+                        <input
+                          type="text"
+                          value={agent.name}
+                          onChange={(e) => handleInlineEdit('name', e.target.value)}
+                          onBlur={() => setEditingField(null)}
+                          onKeyDown={(e) => e.key === 'Enter' && setEditingField(null)}
+                          autoFocus
+                          className="text-xl font-semibold text-charcoal w-full px-2 py-1 -ml-2 border border-teal rounded-lg focus:outline-none"
+                        />
+                      ) : (
+                        <h2
+                          onClick={() => setEditingField('name')}
+                          className="text-xl font-semibold text-charcoal cursor-pointer hover:text-teal transition-colors"
+                        >
+                          {agent.name}
+                        </h2>
+                      )}
+
+                      {editingField === 'objective' ? (
+                        <textarea
+                          value={agent.objective}
+                          onChange={(e) => handleInlineEdit('objective', e.target.value)}
+                          onBlur={() => setEditingField(null)}
+                          autoFocus
+                          rows={2}
+                          className="text-sm text-muted mt-1 w-full px-2 py-1 -ml-2 border border-teal rounded-lg focus:outline-none resize-none"
+                        />
+                      ) : (
+                        <p
+                          onClick={() => setEditingField('objective')}
+                          className="text-sm text-muted mt-1 cursor-pointer hover:text-charcoal transition-colors"
+                        >
+                          {agent.objective || 'Click to add objective...'}
+                        </p>
+                      )}
+
+                      {/* Autonomy Badge */}
+                      {completedPhases.has('autonomy_level') && (
+                        <div className="mt-3">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                            agent.autonomy === 'autonomous' ? 'bg-sage-tint text-sage' :
+                            agent.autonomy === 'assisted' ? 'bg-amber-light/20 text-amber' :
+                            'bg-cream-dark text-charcoal-light'
+                          }`}>
+                            {agent.autonomy === 'autonomous' ? '🚀' : agent.autonomy === 'assisted' ? '🤝' : '👀'}
+                            {agent.autonomy.charAt(0).toUpperCase() + agent.autonomy.slice(1)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions Card */}
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span>📝</span> Instructions ({agent.instructions.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {agent.instructions.map((instruction, i) => (
+                      <div key={i} className="flex items-start gap-2 group">
+                        <span className="text-xs font-medium text-teal mt-2 w-5 text-right flex-shrink-0">{i + 1}.</span>
+                        {editingField === `instruction-${i}` ? (
+                          <input
+                            type="text"
+                            value={instruction}
+                            onChange={(e) => handleInstructionEdit(i, e.target.value)}
+                            onBlur={() => setEditingField(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setEditingField(null)}
+                            autoFocus
+                            className="flex-1 text-sm px-2 py-1 border border-teal rounded-lg focus:outline-none"
+                          />
+                        ) : (
+                          <div className="flex-1 flex items-center gap-1">
+                            <span
+                              onClick={() => setEditingField(`instruction-${i}`)}
+                              className="flex-1 text-sm text-charcoal cursor-pointer hover:text-teal py-1 transition-colors"
+                            >
+                              {instruction || 'Click to edit...'}
+                            </span>
+                            {agent.instructions.length > 1 && (
+                              <button
+                                onClick={() => handleRemoveInstruction(i)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-muted hover:text-rust transition-all"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={handleAddInstruction}
+                      className="flex items-center gap-1 text-xs text-teal hover:text-teal-dark transition-colors mt-1 ml-7"
+                    >
+                      <span>+</span> Add step
+                    </button>
+                  </div>
+                </div>
+
+                {/* Triggers */}
+                {completedPhases.has('triggers') && (
+                  <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                    <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                      <span>⚡</span> Triggers
+                      <button
+                        onClick={() => { setEditingSection('triggers'); setPickerSelections([...agent.triggers]); }}
+                        className="ml-auto p-1 text-muted hover:text-teal transition-colors"
+                        aria-label="Edit triggers"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </h3>
+                    {agent.triggers.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {agent.triggers.map(triggerId => {
+                          const trigger = triggerOptionsList.find(t => t.id === triggerId);
+                          return trigger ? (
+                            <span key={triggerId} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream rounded-lg text-sm">
+                              <span>{trigger.icon}</span>
+                              <span className="text-charcoal">{trigger.label}</span>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted italic">No triggers selected</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Tools */}
+                {completedPhases.has('tools') && (
+                  <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                    <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                      <span>🔌</span> Tools
+                      <button
+                        onClick={() => { setEditingSection('tools'); setPickerSelections([...agent.tools]); }}
+                        className="ml-auto p-1 text-muted hover:text-teal transition-colors"
+                        aria-label="Edit tools"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </h3>
+                    {agent.tools.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {agent.tools.map(toolId => {
+                          const tool = availableTools.find(t => t.id === toolId);
+                          return tool ? (
+                            <span key={toolId} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream rounded-lg text-sm">
+                              <span>{tool.icon}</span>
+                              <span className="text-charcoal">{tool.name}</span>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted italic">No tools selected</p>
+                    )}
+                  </div>
+                )}
+
+                {/* SOPs */}
+                {completedPhases.has('sops') && (
+                  <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                    <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                      <span>📋</span> SOPs
+                      <button
+                        onClick={() => { setEditingSection('sops'); setPickerSelections([...agent.sops]); }}
+                        className="ml-auto p-1 text-muted hover:text-teal transition-colors"
+                        aria-label="Edit SOPs"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </h3>
+                    {agent.sops.length > 0 ? (
+                      <div className="space-y-2">
+                        {agent.sops.map(sopId => {
+                          const sop = sopLibrary.find(s => s.id === sopId);
+                          return sop ? (
+                            <div key={sopId} className="flex items-center gap-2 p-2 bg-cream rounded-lg">
+                              <span>📋</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">{sop.name}</div>
+                                <div className="text-xs text-muted">{sop.steps} steps · {sop.category}</div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted italic">No SOPs selected</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Empty state */
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <div className="w-16 h-16 bg-cream rounded-2xl flex items-center justify-center mb-4">
+                  <span className="text-3xl opacity-50">🤖</span>
+                </div>
+                <h3 className="text-lg font-medium text-charcoal mb-2">Your agent will appear here</h3>
+                <p className="text-sm text-muted max-w-sm">
+                  Describe what you want this agent to do, and I'll help you configure it step by step.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Picker Dialog Overlay */}
+          {editingSection && (
+            <div className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm flex items-center justify-center p-6 z-10">
+              <div className="bg-white rounded-xl border border-border-light shadow-soft-lg w-full max-w-md max-h-[80vh] flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border-light">
+                  <h3 className="text-base font-semibold text-charcoal">{getPickerTitle()}</h3>
+                  <button
+                    onClick={handlePickerClose}
+                    className="p-1 text-muted hover:text-charcoal transition-colors"
+                    aria-label="Close picker"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Items */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                  {getPickerItems().map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => handlePickerToggle(item.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                        pickerSelections.includes(item.id)
+                          ? 'border-teal bg-teal-tint/50'
+                          : 'border-border-light hover:border-teal/30 bg-white'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                        pickerSelections.includes(item.id)
+                          ? 'border-teal bg-teal'
+                          : 'border-gray-300'
+                      }`}>
+                        {pickerSelections.includes(item.id) && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-lg flex-shrink-0">{item.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-charcoal">{item.label}</div>
+                        {item.description && (
+                          <div className="text-xs text-muted">{item.description}</div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+
+                  {/* Browse SOP Marketplace button for SOPs picker */}
+                  {editingSection === 'sops' && (
+                    <button className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border-2 border-dashed border-border-light hover:border-teal/30 text-muted hover:text-teal transition-all">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <span className="text-sm font-medium">Browse SOP Marketplace</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-4 border-t border-border-light flex items-center justify-between">
+                  <span className="text-xs text-muted">{pickerSelections.length} selected</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handlePickerClose}
+                      className="px-4 py-2 text-sm font-medium text-charcoal hover:bg-cream rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePickerSave}
+                      className="px-4 py-2 text-sm font-medium text-white bg-teal hover:bg-teal-dark rounded-lg transition-colors"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Project Wizard Component - manages its own state to prevent focus loss
   const ProjectWizard = () => {
     const [step, setStep] = useState(1);
@@ -8159,6 +9244,7 @@ const AgentCommandCenter = () => {
       case 'agent-detail': return <AgentDetailView />;
       case 'agent-create': return <AgentFormView />;
       case 'agent-edit': return <AgentFormView />;
+      case 'agent-creator-ai': return <AIAgentCreatorView />;
       // Analytics Views
       case 'analytics-performance': return <PerformanceDashboardView />;
       case 'analytics-cost': return <CostEfficiencyView />;
