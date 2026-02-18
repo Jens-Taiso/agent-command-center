@@ -957,6 +957,7 @@ const AgentCommandCenter = () => {
                 <span>📁</span> New Project
               </button>
               <button
+                onClick={() => { setEditingAgent(null); setCurrentView('agent-creator-ai'); }}
                 className="w-full px-4 py-2 text-left text-sm text-charcoal hover:bg-cream flex items-center gap-2"
               >
                 <span>🤖</span> New Agent
@@ -1341,7 +1342,7 @@ const AgentCommandCenter = () => {
               <div className="space-y-3">
                 {[
                   { step: 1, label: 'Create your first project', description: 'Describe your goal and let AI set it up', icon: '✨', done: false, action: () => setCurrentView('project-creator-ai') },
-                  { step: 2, label: 'Add AI agents', description: 'Configure agents for your workflows', icon: '🤖', done: false },
+                  { step: 2, label: 'Add AI agents', description: 'Configure agents for your workflows', icon: '🤖', done: false, action: () => { setEditingAgent(null); setCurrentView('agent-creator-ai'); } },
                   { step: 3, label: 'Connect your tools', description: 'Integrate with Slack, Google, Salesforce, and more', icon: '🔌', done: false, action: () => setCurrentView('tools') },
                   { step: 4, label: 'Create or import SOPs', description: 'Define standard operating procedures for your workflows', icon: '📋', done: false, action: () => setCurrentView('building-blocks-sops') },
                   { step: 5, label: 'Invite your team', description: 'Add team members for human-in-the-loop tasks', icon: '👥', done: false, action: () => setCurrentView('team') },
@@ -7399,7 +7400,7 @@ const AgentCommandCenter = () => {
                 <button
                   onClick={() => {
                     setEditingAgent(null);
-                    setCurrentView('agent-create');
+                    setCurrentView('agent-creator-ai');
                   }}
                   className="text-sm text-teal hover:text-teal-dark"
                 >
@@ -7747,7 +7748,7 @@ const AgentCommandCenter = () => {
             <button
               onClick={() => {
                 setEditingAgent(null);
-                setCurrentView('agent-create');
+                setCurrentView('agent-creator-ai');
               }}
               className="text-sm text-teal hover:text-teal-dark"
             >
