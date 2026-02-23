@@ -7,8 +7,14 @@ const AgentCommandCenter = () => {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [selectedTool, setSelectedTool] = useState(null);
 
+  // Empty mode toggle - simulates first-time user with no data
+  const [isEmptyMode, setIsEmptyMode] = useState(true);
+
   // Accessibility: Focus management
   const mainHeadingRef = useRef(null);
+
+  // SOP Modal file input ref
+  const sopFileInputRef = useRef(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -48,6 +54,46 @@ const AgentCommandCenter = () => {
   const [editProject, setEditProject] = useState(null);
   const [editTab, setEditTab] = useState('overview');
 
+  // Agent Form State
+  const [editingAgent, setEditingAgent] = useState(null);
+
+  // Projects List State
+  const [projectsSortConfig, setProjectsSortConfig] = useState({
+    key: 'dateModified',
+    direction: 'desc'
+  });
+
+  // SOP Creation Modal State
+  const [sopModalOpen, setSopModalOpen] = useState(false);
+  const [sopModalState, setSopModalState] = useState('input'); // 'input' | 'processing' | 'review'
+  const [sopProcessingStep, setSopProcessingStep] = useState(0);
+  const [sopForm, setSopForm] = useState({
+    name: '',
+    description: '',
+    category: 'Sales',
+    files: []
+  });
+  const [generatedSop, setGeneratedSop] = useState(null);
+
+  // AI Project Creator State
+  const [aiCreatorState, setAICreatorState] = useState({
+    phase: 'greeting',
+    messages: [],
+    responses: {},
+    generatedBlocks: { agents: [], sops: [] },
+    project: {
+      name: '',
+      goal: '',
+      agents: [],
+      sops: [],
+      tools: [],
+      people: [],
+      workflow: { nodes: [], connections: [], triggers: [] }
+    },
+    isProcessing: false,
+    editingBlock: null // { type: 'agent'|'sop', index: number } for inline editing
+  });
+
   // Focus management on view changes
   useEffect(() => {
     if (mainHeadingRef.current) {
@@ -85,13 +131,88 @@ const AgentCommandCenter = () => {
     }, 200);
   };
 
+  // Get Most Recently Used projects (sorted by lastAccessed, limited to N)
+  const getMRUProjects = (allProjects, limit = 5) => {
+    return [...allProjects]
+      .sort((a, b) => new Date(b.lastAccessed) - new Date(a.lastAccessed))
+      .slice(0, limit);
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} days ago`;
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  };
+
+  // Reusable Empty State Component
+  const EmptyState = ({
+    icon,
+    title,
+    description,
+    primaryAction,
+    primaryLabel,
+    secondaryAction,
+    secondaryLabel,
+    children
+  }) => (
+    <div className="flex flex-col items-center justify-center text-center py-12 px-6">
+      {icon && (
+        <div className="w-16 h-16 bg-sage-tint rounded-2xl flex items-center justify-center mb-4">
+          <span className="text-3xl">{icon}</span>
+        </div>
+      )}
+      <h3 className="text-lg font-semibold text-charcoal mb-2">{title}</h3>
+      {description && (
+        <p className="text-sm text-muted max-w-md mb-6">{description}</p>
+      )}
+      {children}
+      {(primaryAction || secondaryAction) && (
+        <div className="flex items-center gap-3 mt-6">
+          {primaryAction && (
+            <button
+              onClick={primaryAction}
+              className="px-4 py-2 text-sm font-medium text-white bg-sage rounded-lg hover:bg-sage-dark transition-colors"
+            >
+              {primaryLabel}
+            </button>
+          )}
+          {secondaryAction && (
+            <button
+              onClick={secondaryAction}
+              className="px-4 py-2 text-sm text-charcoal-light hover:text-charcoal transition-colors"
+            >
+              {secondaryLabel}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   // Sample data
   const stats = { active: 8, pending: 3, errors: 1, completed: 47 };
   
   const projects = [
-    { id: 1, name: 'Sales Ops', agents: 3, humans: 2, active: 2 },
-    { id: 2, name: 'Finance', agents: 2, humans: 1, active: 1 },
-    { id: 3, name: 'HR Onboarding', agents: 2, humans: 2, active: 0 },
+    { id: 1, name: 'Sales Ops', agents: 3, humans: 2, active: 2, status: 'running', dateAdded: '2024-01-15', dateModified: '2024-02-10', lastAccessed: '2024-02-13', notifications: 3 },
+    { id: 2, name: 'Finance', agents: 2, humans: 1, active: 1, status: 'waiting', dateAdded: '2024-01-20', dateModified: '2024-02-08', lastAccessed: '2024-02-11', notifications: 1 },
+    { id: 3, name: 'HR Onboarding', agents: 2, humans: 2, active: 0, status: 'halted', dateAdded: '2024-02-01', dateModified: '2024-02-05', lastAccessed: '2024-02-09', notifications: 0 },
+    { id: 4, name: 'Customer Support', agents: 4, humans: 3, active: 3, status: 'running', dateAdded: '2023-11-10', dateModified: '2024-02-12', lastAccessed: '2024-02-12', notifications: 5 },
+    { id: 5, name: 'Marketing Automation', agents: 2, humans: 1, active: 0, status: 'halted', dateAdded: '2023-12-05', dateModified: '2024-01-15', lastAccessed: '2024-01-20', notifications: 0 },
+    { id: 6, name: 'Data Analytics', agents: 3, humans: 2, active: 1, status: 'running', dateAdded: '2024-01-08', dateModified: '2024-02-13', lastAccessed: '2024-02-13', notifications: 2 },
+    { id: 7, name: 'Inventory Management', agents: 1, humans: 1, active: 0, status: 'waiting', dateAdded: '2024-02-05', dateModified: '2024-02-07', lastAccessed: '2024-02-07', notifications: 1 },
   ];
 
   const inboxItems = [
@@ -150,6 +271,282 @@ const AgentCommandCenter = () => {
     { id: 'customer-support', name: 'Customer Support', icon: '💬', description: 'Triage tickets, generate responses, and escalate issues' },
     { id: 'hr-onboarding', name: 'HR Onboarding', icon: '👋', description: 'Coordinate new hire paperwork and orientation tasks' },
   ];
+
+  // ============================================
+  // AI PROJECT CREATOR - Constants & Templates
+  // ============================================
+
+  const CONVERSATION_PHASES = {
+    GREETING: 'greeting',
+    GOAL_DISCOVERY: 'goal_discovery',
+    SCOPE_CLARIFICATION: 'scope_clarification',
+    TOOL_SELECTION: 'tool_selection',
+    WORKFLOW_DESIGN: 'workflow_design',
+    AUTONOMY_LEVEL: 'autonomy_level',
+    HUMAN_TOUCHPOINTS: 'human_touchpoints',
+    REVIEW: 'review',
+    COMPLETE: 'complete'
+  };
+
+  const GOAL_PATTERNS = {
+    sales: {
+      keywords: ['lead', 'sales', 'outreach', 'prospect', 'pipeline', 'crm', 'deal', 'opportunity', 'qualify'],
+      suggestedName: 'Sales Pipeline Automation',
+      suggestedAgents: [
+        { name: 'Lead Qualifier', objective: 'Score and qualify incoming leads based on fit criteria', autonomy: 'assisted' },
+        { name: 'Outreach Sender', objective: 'Send personalized outreach emails to qualified leads', autonomy: 'supervised' },
+        { name: 'Pipeline Tracker', objective: 'Update CRM and track deal progress automatically', autonomy: 'autonomous' }
+      ],
+      suggestedSOPs: [
+        { name: 'Lead Qualification', category: 'Sales', description: 'Score and qualify incoming leads', steps: [
+          { id: 1, name: 'Receive lead data', description: 'Capture incoming lead information from forms or integrations' },
+          { id: 2, name: 'Enrich lead profile', description: 'Pull additional data from CRM and external sources' },
+          { id: 3, name: 'Apply scoring criteria', description: 'Evaluate lead against qualification rules' },
+          { id: 4, name: 'Determine qualification status', description: 'Mark as qualified, nurture, or disqualify' },
+          { id: 5, name: 'Route to owner', description: 'Assign to appropriate sales rep or queue' }
+        ]},
+        { name: 'Email Outreach', category: 'Sales', description: 'Send personalized outreach with approval', steps: [
+          { id: 1, name: 'Select recipients', description: 'Identify leads ready for outreach' },
+          { id: 2, name: 'Generate email content', description: 'Create personalized email using templates' },
+          { id: 3, name: 'Queue for approval', description: 'Submit email for human review if required' },
+          { id: 4, name: 'Send and track', description: 'Deliver email and monitor engagement' }
+        ]}
+      ],
+      suggestedTools: ['salesforce', 'hubspot', 'google', 'slack'],
+      workflowPattern: 'sequential-with-handoff'
+    },
+    finance: {
+      keywords: ['invoice', 'payment', 'expense', 'accounting', 'budget', 'financial', 'billing', 'ap', 'ar'],
+      suggestedName: 'Finance Automation',
+      suggestedAgents: [
+        { name: 'Invoice Processor', objective: 'Extract and validate invoice data automatically', autonomy: 'assisted' },
+        { name: 'Expense Auditor', objective: 'Review expenses against company policy', autonomy: 'supervised' }
+      ],
+      suggestedSOPs: [
+        { name: 'Invoice Processing', category: 'Finance', description: 'Extract and validate invoice data', steps: [
+          { id: 1, name: 'Receive invoice', description: 'Capture incoming invoice document' },
+          { id: 2, name: 'Extract data', description: 'Parse vendor, amount, date, and line items' },
+          { id: 3, name: 'Validate against PO', description: 'Match to purchase order if applicable' },
+          { id: 4, name: 'Route for approval', description: 'Send to approver based on amount threshold' }
+        ]},
+        { name: 'Expense Validation', category: 'Finance', description: 'Validate expenses against policy', steps: [
+          { id: 1, name: 'Receive expense report', description: 'Capture submitted expense' },
+          { id: 2, name: 'Check policy compliance', description: 'Validate against expense policy rules' },
+          { id: 3, name: 'Flag exceptions', description: 'Identify out-of-policy items' },
+          { id: 4, name: 'Route for review', description: 'Send to manager for approval' }
+        ]}
+      ],
+      suggestedTools: ['quickbooks', 'stripe', 'google', 'slack'],
+      workflowPattern: 'validation-chain'
+    },
+    support: {
+      keywords: ['ticket', 'support', 'customer', 'help', 'issue', 'complaint', 'service', 'helpdesk'],
+      suggestedName: 'Customer Support Automation',
+      suggestedAgents: [
+        { name: 'Ticket Triager', objective: 'Categorize and route support tickets automatically', autonomy: 'autonomous' },
+        { name: 'Response Drafter', objective: 'Generate initial response drafts for agents', autonomy: 'supervised' }
+      ],
+      suggestedSOPs: [
+        { name: 'Ticket Triage', category: 'Support', description: 'Categorize and route support tickets', steps: [
+          { id: 1, name: 'Receive ticket', description: 'Capture incoming support request' },
+          { id: 2, name: 'Analyze content', description: 'Determine category and priority' },
+          { id: 3, name: 'Route to team', description: 'Assign to appropriate support queue' }
+        ]},
+        { name: 'Response Generation', category: 'Support', description: 'Draft responses for review', steps: [
+          { id: 1, name: 'Analyze ticket', description: 'Understand customer issue' },
+          { id: 2, name: 'Search knowledge base', description: 'Find relevant articles and solutions' },
+          { id: 3, name: 'Draft response', description: 'Generate personalized response' },
+          { id: 4, name: 'Queue for review', description: 'Send to agent for approval and sending' }
+        ]}
+      ],
+      suggestedTools: ['zendesk', 'slack', 'notion'],
+      workflowPattern: 'triage-and-escalate'
+    },
+    hr: {
+      keywords: ['onboarding', 'hire', 'employee', 'hr', 'document', 'orientation', 'recruitment', 'new hire'],
+      suggestedName: 'HR Onboarding Automation',
+      suggestedAgents: [
+        { name: 'Onboarding Guide', objective: 'Coordinate onboarding tasks and timeline', autonomy: 'assisted' },
+        { name: 'Document Collector', objective: 'Request and track required documents', autonomy: 'supervised' }
+      ],
+      suggestedSOPs: [
+        { name: 'Document Collection', category: 'HR', description: 'Request and track new hire documents', steps: [
+          { id: 1, name: 'Identify requirements', description: 'Determine required documents for role' },
+          { id: 2, name: 'Send requests', description: 'Email new hire with document checklist' },
+          { id: 3, name: 'Track submissions', description: 'Monitor received documents' },
+          { id: 4, name: 'Verify completeness', description: 'Confirm all documents received and valid' }
+        ]},
+        { name: 'Onboarding Coordination', category: 'HR', description: 'Coordinate onboarding activities', steps: [
+          { id: 1, name: 'Create schedule', description: 'Build onboarding timeline' },
+          { id: 2, name: 'Assign tasks', description: 'Distribute tasks to relevant teams' },
+          { id: 3, name: 'Send reminders', description: 'Notify stakeholders of upcoming tasks' },
+          { id: 4, name: 'Track completion', description: 'Monitor onboarding progress' }
+        ]}
+      ],
+      suggestedTools: ['google', 'slack', 'notion'],
+      workflowPattern: 'checklist-driven'
+    }
+  };
+
+  // Helper to match user goal to pattern
+  const matchGoalPattern = (userInput) => {
+    const input = userInput.toLowerCase();
+    let bestMatch = null;
+    let highestScore = 0;
+
+    Object.entries(GOAL_PATTERNS).forEach(([key, pattern]) => {
+      const score = pattern.keywords.filter(kw => input.includes(kw)).length;
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = { key, ...pattern };
+      }
+    });
+
+    return bestMatch || GOAL_PATTERNS.sales; // Default fallback
+  };
+
+  // Generate unique IDs for building blocks
+  const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+  // Agent Objective Patterns - for conversational agent creation
+  const AGENT_OBJECTIVE_PATTERNS = {
+    lead_qualification: {
+      keywords: ['lead', 'qualify', 'score', 'prospect', 'inbound', 'crm', 'pipeline'],
+      suggestedName: 'Lead Qualifier',
+      suggestedInstructions: [
+        'Receive incoming lead data from CRM or web forms',
+        'Enrich lead profile with available external data',
+        'Apply scoring criteria against qualification rules',
+        'Determine qualification status (qualified, nurture, disqualify)',
+        'Route qualified leads to the appropriate sales owner'
+      ],
+      suggestedAutonomy: 'assisted',
+      suggestedTriggers: ['new-lead', 'form-submission'],
+      suggestedTools: ['salesforce', 'hubspot', 'slack'],
+      suggestedSOPs: [1]
+    },
+    outreach: {
+      keywords: ['outreach', 'email', 'send', 'campaign', 'follow-up', 'sequence', 'nurture'],
+      suggestedName: 'Outreach Sender',
+      suggestedInstructions: [
+        'Select recipients from qualified lead pool',
+        'Generate personalized email content using templates',
+        'Queue draft emails for human review if required',
+        'Send approved emails and track delivery',
+        'Monitor engagement metrics and flag responses'
+      ],
+      suggestedAutonomy: 'supervised',
+      suggestedTriggers: ['schedule-daily', 'manual'],
+      suggestedTools: ['google', 'hubspot', 'slack'],
+      suggestedSOPs: [2]
+    },
+    invoice_processing: {
+      keywords: ['invoice', 'payment', 'process', 'extract', 'validate', 'billing', 'ap'],
+      suggestedName: 'Invoice Processor',
+      suggestedInstructions: [
+        'Receive incoming invoice documents from email or uploads',
+        'Extract vendor, amount, date, and line item data',
+        'Validate extracted data against purchase orders',
+        'Flag discrepancies for human review',
+        'Route approved invoices for payment processing'
+      ],
+      suggestedAutonomy: 'assisted',
+      suggestedTriggers: ['email-received', 'schedule-daily'],
+      suggestedTools: ['quickbooks', 'google', 'slack'],
+      suggestedSOPs: [3]
+    },
+    expense_audit: {
+      keywords: ['expense', 'audit', 'review', 'policy', 'compliance', 'reimburse'],
+      suggestedName: 'Expense Auditor',
+      suggestedInstructions: [
+        'Receive submitted expense reports',
+        'Check each line item against company expense policy',
+        'Flag out-of-policy items with specific violations',
+        'Calculate reimbursement totals for compliant items',
+        'Route flagged reports to manager for review'
+      ],
+      suggestedAutonomy: 'supervised',
+      suggestedTriggers: ['schedule-weekly', 'manual'],
+      suggestedTools: ['quickbooks', 'google', 'slack'],
+      suggestedSOPs: [4]
+    },
+    ticket_triage: {
+      keywords: ['ticket', 'triage', 'support', 'customer', 'helpdesk', 'categorize', 'route'],
+      suggestedName: 'Ticket Triager',
+      suggestedInstructions: [
+        'Receive incoming support ticket from helpdesk',
+        'Analyze ticket content to determine category and urgency',
+        'Apply priority scoring based on customer tier and issue type',
+        'Assign ticket to the appropriate support queue',
+        'Send acknowledgment to customer with estimated response time'
+      ],
+      suggestedAutonomy: 'autonomous',
+      suggestedTriggers: ['new-lead', 'email-received'],
+      suggestedTools: ['zendesk', 'slack', 'notion'],
+      suggestedSOPs: [6]
+    },
+    response_drafting: {
+      keywords: ['respond', 'reply', 'draft', 'answer', 'knowledge', 'template'],
+      suggestedName: 'Response Drafter',
+      suggestedInstructions: [
+        'Analyze incoming customer ticket or inquiry',
+        'Search knowledge base for relevant articles and solutions',
+        'Draft a personalized response addressing the issue',
+        'Include relevant links and next steps',
+        'Queue response for human agent review before sending'
+      ],
+      suggestedAutonomy: 'supervised',
+      suggestedTriggers: ['manual'],
+      suggestedTools: ['zendesk', 'notion', 'slack'],
+      suggestedSOPs: [6]
+    },
+    onboarding: {
+      keywords: ['onboard', 'hire', 'new employee', 'orientation', 'document', 'checklist'],
+      suggestedName: 'Onboarding Guide',
+      suggestedInstructions: [
+        'Receive new hire notification from HR system',
+        'Generate personalized onboarding checklist based on role',
+        'Send welcome email with first-day instructions',
+        'Track document submission progress',
+        'Notify relevant stakeholders of onboarding milestones'
+      ],
+      suggestedAutonomy: 'assisted',
+      suggestedTriggers: ['manual', 'form-submission'],
+      suggestedTools: ['google', 'slack', 'notion'],
+      suggestedSOPs: [5]
+    },
+    data_sync: {
+      keywords: ['sync', 'update', 'track', 'monitor', 'report', 'dashboard', 'data'],
+      suggestedName: 'Data Sync Agent',
+      suggestedInstructions: [
+        'Connect to configured data sources on schedule',
+        'Pull latest records and compare with previous state',
+        'Identify new, modified, or deleted entries',
+        'Update target system with synchronized data',
+        'Generate sync summary report and notify team'
+      ],
+      suggestedAutonomy: 'autonomous',
+      suggestedTriggers: ['schedule-daily', 'schedule-weekly'],
+      suggestedTools: ['google', 'airtable', 'slack'],
+      suggestedSOPs: []
+    }
+  };
+
+  const matchAgentObjective = (userInput) => {
+    const input = userInput.toLowerCase();
+    let bestMatch = null;
+    let highestScore = 0;
+
+    Object.entries(AGENT_OBJECTIVE_PATTERNS).forEach(([key, pattern]) => {
+      const score = pattern.keywords.filter(kw => input.includes(kw)).length;
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = { key, ...pattern };
+      }
+    });
+
+    return bestMatch || AGENT_OBJECTIVE_PATTERNS.lead_qualification;
+  };
 
   // Standard Operating Procedures Library
   const sopLibrary = [
@@ -211,6 +608,38 @@ const AgentCommandCenter = () => {
         role="status"
         aria-label={label}
       />
+    );
+  };
+
+  const ProjectStatusBadge = ({ status }) => {
+    const styles = {
+      running: {
+        dot: 'bg-sage',
+        text: 'text-sage-dark',
+        bg: 'bg-sage-tint',
+        label: 'Running'
+      },
+      halted: {
+        dot: 'bg-charcoal-light',
+        text: 'text-charcoal-light',
+        bg: 'bg-cream-dark',
+        label: 'Halted'
+      },
+      waiting: {
+        dot: 'bg-amber',
+        text: 'text-amber',
+        bg: 'bg-amber-light/20',
+        label: 'Waiting'
+      }
+    };
+
+    const style = styles[status] || styles.halted;
+
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${style.bg}`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`}></span>
+        <span className={style.text}>{style.label}</span>
+      </span>
     );
   };
 
@@ -406,23 +835,38 @@ const AgentCommandCenter = () => {
 
   // Header Component
   const Header = () => (
-    <header className="h-14 bg-charcoal border-b border-charcoal-light flex items-center justify-between px-4" role="banner">
+    <header className="h-14 bg-cream-darker border-b border-border flex items-center justify-between px-4" role="banner">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 bg-gradient-to-br from-sage to-teal rounded-lg flex items-center justify-center">
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
-        <span className="text-white font-semibold tracking-tight">AgentOS</span>
+        <span className="text-charcoal font-semibold tracking-tight">Taiso Zen</span>
       </div>
 
       <div className="flex items-center gap-6">
-        <div className="flex items-center gap-4">
-          <MetricPill label="Active" value={stats.active} color="sage" />
-          <MetricPill label="Pending" value={stats.pending} color="amber" />
-          <MetricPill label="Errors" value={stats.errors} color="red" />
-          <MetricPill label="Completed" value={stats.completed} color="muted" />
-        </div>
+        {/* Empty mode toggle for testing */}
+        <button
+          onClick={() => setIsEmptyMode(!isEmptyMode)}
+          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+            isEmptyMode
+              ? 'bg-amber-light/20 text-amber border border-amber/30'
+              : 'bg-sage-tint text-sage border border-sage/30'
+          }`}
+          title="Toggle between empty state and demo data"
+        >
+          {isEmptyMode ? 'Empty Mode' : 'Demo Mode'}
+        </button>
+
+        {!isEmptyMode && (
+          <div className="flex items-center gap-4">
+            <MetricPill label="Active" value={stats.active} color="sage" />
+            <MetricPill label="Pending" value={stats.pending} color="amber" />
+            <MetricPill label="Errors" value={stats.errors} color="red" />
+            <MetricPill label="Completed" value={stats.completed} color="muted" />
+          </div>
+        )}
 
         <div className="relative">
           <label className="sr-only" htmlFor="global-search">Search agents and tasks</label>
@@ -435,7 +879,7 @@ const AgentCommandCenter = () => {
             aria-label="Search agents and tasks"
             aria-expanded={searchResults.length > 0 || isSearching}
             aria-controls="search-results"
-            className="w-64 h-8 bg-charcoal-light border border-muted/30 rounded-lg px-3 pr-8 text-sm text-cream placeholder-muted focus:outline-none focus:border-teal"
+            className="w-64 h-8 bg-white border border-border rounded-lg px-3 pr-8 text-sm text-charcoal placeholder-muted focus:outline-none focus:border-teal"
           />
           <svg className="w-4 h-4 text-muted absolute right-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -486,7 +930,7 @@ const AgentCommandCenter = () => {
           <button
             aria-label="Quick actions menu"
             aria-haspopup="menu"
-            className="w-8 h-8 bg-sage rounded-lg flex items-center justify-center text-white font-bold hover:bg-sage-dark focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-charcoal"
+            className="w-8 h-8 bg-sage rounded-lg flex items-center justify-center text-white font-bold hover:bg-sage-dark focus:outline-none focus:ring-2 focus:ring-sage focus:ring-offset-2 focus:ring-offset-cream-dark"
           >
             <span aria-hidden="true">+</span>
           </button>
@@ -513,6 +957,7 @@ const AgentCommandCenter = () => {
                 <span>📁</span> New Project
               </button>
               <button
+                onClick={() => { setEditingAgent(null); setCurrentView('agent-creator-ai'); }}
                 className="w-full px-4 py-2 text-left text-sm text-charcoal hover:bg-cream flex items-center gap-2"
               >
                 <span>🤖</span> New Agent
@@ -540,21 +985,21 @@ const AgentCommandCenter = () => {
 
   const MetricPill = ({ label, value, color }) => {
     const colors = {
-      sage: 'bg-sage/20 text-sage-light',
-      amber: 'bg-amber/20 text-amber-light',
-      red: 'bg-red-500/20 text-red-400',
-      muted: 'bg-muted/30 text-cream'
+      sage: 'bg-sage text-white',
+      amber: 'bg-amber text-white',
+      red: 'bg-red-600 text-white',
+      muted: 'bg-charcoal text-white'
     };
     return (
       <div className={`px-2.5 py-1 rounded-md text-xs font-medium ${colors[color]}`}>
-        <span className="opacity-70">{label}</span> <span className="ml-1">{value}</span>
+        <span className="opacity-80">{label}</span> <span className="ml-1">{value}</span>
       </div>
     );
   };
 
   // Sidebar Component
   const Sidebar = () => (
-    <aside className="w-56 bg-cream border-r border-border-light flex flex-col overflow-y-auto">
+    <aside className="w-56 bg-cream border-r border-border-light flex flex-col overflow-y-auto shadow-soft-lg z-10 relative">
       <nav className="p-3 space-y-1" aria-label="Main navigation">
         <SidebarItem
           icon="◉"
@@ -565,7 +1010,7 @@ const AgentCommandCenter = () => {
         <SidebarItem
           icon="📬"
           label="Inbox"
-          badge={stats.pending}
+          badge={isEmptyMode ? null : stats.pending}
           active={currentView === 'inbox'}
           onClick={() => { setCurrentView('inbox'); setSelectedProject(null); setSelectedAgent(null); }}
         />
@@ -573,118 +1018,234 @@ const AgentCommandCenter = () => {
 
       <div className="px-3 pt-4">
         <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Projects</h2>
-        <div className="space-y-0.5">
-          {projects.map(project => (
+        {isEmptyMode ? (
+          <div className="py-3 px-2.5 text-center">
+            <p className="text-xs text-muted mb-2">No projects yet</p>
             <button
-              key={project.id}
-              onClick={() => { setSelectedProject(project); setCurrentView('project-dashboard'); setSelectedAgent(null); }}
+              onClick={() => {
+                setWizardStep(1);
+                setNewProject({
+                  name: '',
+                  goal: '',
+                  template: null,
+                  status: 'draft',
+                  agents: [],
+                  sops: [],
+                  tools: [],
+                  people: [],
+                  workflow: { nodes: [], connections: [], triggers: [] }
+                });
+                setCurrentView('project-wizard');
+              }}
+              className="w-full px-2.5 py-1.5 text-sm text-white bg-sage rounded-lg hover:bg-sage-dark transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span className="text-lg leading-none">+</span> Create Project
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* MRU Projects List - max 5 */}
+            <div className="space-y-0.5">
+              {getMRUProjects(projects, 5).map(project => (
+                <button
+                  key={project.id}
+                  onClick={() => { setSelectedProject(project); setCurrentView('project-dashboard'); setSelectedAgent(null); }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                    selectedProject?.id === project.id && (currentView === 'project-dashboard' || currentView === 'project-edit')
+                      ? 'bg-cream-dark text-charcoal font-medium'
+                      : 'text-charcoal-light hover:bg-cream-dark/50'
+                  }`}
+                >
+                  <span className="truncate">{project.name}</span>
+                  {project.active > 0 && (
+                    <span className="flex items-center gap-1 text-xs text-sage">
+                      <StatusBadge status="active" />
+                      {project.active}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-border-light my-2"></div>
+
+            {/* All Projects Action */}
+            <button
+              onClick={() => { setCurrentView('projects-list'); setSelectedProject(null); }}
               className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors ${
-                selectedProject?.id === project.id && (currentView === 'project-dashboard' || currentView === 'project-edit')
+                currentView === 'projects-list'
                   ? 'bg-cream-dark text-charcoal font-medium'
                   : 'text-charcoal-light hover:bg-cream-dark/50'
               }`}
             >
-              <span>{project.name}</span>
-              {project.active > 0 && (
-                <span className="flex items-center gap-1 text-xs text-sage">
-                  <StatusBadge status="active" />
-                  {project.active}
-                </span>
-              )}
+              <span className="flex items-center gap-2">
+                <span className="opacity-70">📁</span>
+                All Projects
+              </span>
+              <span className="text-xs text-muted">{projects.length}</span>
             </button>
-          ))}
-        </div>
-        <button
-          onClick={() => {
-            setWizardStep(1);
-            setNewProject({
-              name: '',
-              goal: '',
-              template: null,
-              status: 'draft',
-              agents: [],
-              sops: [],
-              tools: [],
-              people: [],
-              workflow: { nodes: [], connections: [], triggers: [] }
-            });
-            setCurrentView('project-wizard');
-          }}
-          className="w-full mt-2 px-2.5 py-1.5 text-sm text-muted hover:text-charcoal text-left flex items-center gap-1.5"
-        >
-          <span className="text-lg leading-none">+</span> New Project
-        </button>
+
+            {/* New Project Button */}
+            <button
+              onClick={() => {
+                setWizardStep(1);
+                setNewProject({
+                  name: '',
+                  goal: '',
+                  template: null,
+                  status: 'draft',
+                  agents: [],
+                  sops: [],
+                  tools: [],
+                  people: [],
+                  workflow: { nodes: [], connections: [], triggers: [] }
+                });
+                setCurrentView('project-wizard');
+              }}
+              className="w-full mt-1 px-2.5 py-1.5 text-sm text-muted hover:text-charcoal text-left flex items-center gap-1.5"
+            >
+              <span className="text-lg leading-none">+</span> New Project
+            </button>
+          </>
+        )}
       </div>
 
+      {/* Building Blocks Section */}
       <div className="px-3 pt-6">
-        <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Operations</h2>
+        <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Building Blocks</h2>
         <div className="space-y-0.5">
           <SidebarItem
-            icon="📅"
-            label="Schedule"
-            active={currentView === 'schedule'}
-            onClick={() => { setCurrentView('schedule'); setSelectedProject(null); }}
+            icon="🤖"
+            label="Agents"
+            badge={allTeamMembers.agents.length}
+            active={currentView === 'building-blocks-agents'}
+            onClick={() => { setCurrentView('building-blocks-agents'); setSelectedProject(null); }}
           />
           <SidebarItem
-            icon="👥"
-            label="Team"
-            active={currentView === 'team'}
-            onClick={() => { setCurrentView('team'); setSelectedProject(null); }}
+            icon="👤"
+            label="Humans"
+            badge={allTeamMembers.humans.length}
+            active={currentView === 'building-blocks-humans'}
+            onClick={() => { setCurrentView('building-blocks-humans'); setSelectedProject(null); }}
           />
           <SidebarItem
-            icon="📜"
-            label="Activity"
-            active={currentView === 'activity'}
-            onClick={() => { setCurrentView('activity'); setSelectedProject(null); }}
+            icon="📋"
+            label="SOPs"
+            badge={sopLibrary.length}
+            active={currentView === 'building-blocks-sops'}
+            onClick={() => { setCurrentView('building-blocks-sops'); setSelectedProject(null); }}
           />
           <SidebarItem
-            icon="🔔"
-            label="Alerts"
-            active={currentView === 'alerts'}
-            onClick={() => { setCurrentView('alerts'); setSelectedProject(null); }}
+            icon="🔌"
+            label="Connected Tools"
+            badge={availableTools.length}
+            active={currentView === 'tools'}
+            onClick={() => { setCurrentView('tools'); setSelectedProject(null); setSelectedTool(null); }}
           />
         </div>
       </div>
 
-      <div className="px-3 pt-6">
-        <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Analytics</h2>
-        <div className="space-y-0.5">
-          <SidebarItem
-            icon="📊"
-            label="Performance"
-            active={currentView === 'analytics-performance'}
-            onClick={() => { setCurrentView('analytics-performance'); setSelectedProject(null); }}
-          />
-          <SidebarItem
-            icon="💰"
-            label="Cost & Efficiency"
-            active={currentView === 'analytics-cost'}
-            onClick={() => { setCurrentView('analytics-cost'); setSelectedProject(null); }}
-          />
-          <SidebarItem
-            icon="✅"
-            label="Quality Metrics"
-            active={currentView === 'analytics-quality'}
-            onClick={() => { setCurrentView('analytics-quality'); setSelectedProject(null); }}
-          />
-          <SidebarItem
-            icon="⚖️"
-            label="Comparisons"
-            active={currentView === 'analytics-compare'}
-            onClick={() => { setCurrentView('analytics-compare'); setSelectedProject(null); }}
-          />
+      {/* Execution monitoring - hidden in empty mode */}
+      {!isEmptyMode && (
+        <div className="px-3 pt-6">
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Execution monitoring</h2>
+          <div className="space-y-0.5">
+            <SidebarItem
+              icon="📅"
+              label="Schedule"
+              active={currentView === 'schedule'}
+              onClick={() => { setCurrentView('schedule'); setSelectedProject(null); }}
+            />
+            {/* Active Team Section - shows team members assigned to projects */}
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 px-2.5 py-1.5 text-sm text-muted">
+                <span className="opacity-70">👥</span>
+                <span className="font-medium">Active Team</span>
+              </div>
+              <div className="pl-4 space-y-0.5">
+                <button
+                  onClick={() => { setCurrentView('team-agents'); setSelectedProject(null); }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                    currentView === 'team-agents'
+                      ? 'bg-cream-dark text-charcoal font-medium'
+                      : 'text-charcoal-light hover:bg-cream-dark/50'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="opacity-70">🤖</span>
+                    Agents
+                  </span>
+                  <span className="text-xs text-muted">{allTeamMembers.agents.filter(a => a.project).length}</span>
+                </button>
+                <button
+                  onClick={() => { setCurrentView('team-humans'); setSelectedProject(null); }}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                    currentView === 'team-humans'
+                      ? 'bg-cream-dark text-charcoal font-medium'
+                      : 'text-charcoal-light hover:bg-cream-dark/50'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="opacity-70">👤</span>
+                    Humans
+                  </span>
+                  <span className="text-xs text-muted">{allTeamMembers.humans.filter(h => h.project).length}</span>
+                </button>
+              </div>
+            </div>
+            <SidebarItem
+              icon="📜"
+              label="Activity"
+              active={currentView === 'activity'}
+              onClick={() => { setCurrentView('activity'); setSelectedProject(null); }}
+            />
+            <SidebarItem
+              icon="🔔"
+              label="Alerts"
+              active={currentView === 'alerts'}
+              onClick={() => { setCurrentView('alerts'); setSelectedProject(null); }}
+            />
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Analytics - hidden in empty mode */}
+      {!isEmptyMode && (
+        <div className="px-3 pt-6">
+          <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Analytics</h2>
+          <div className="space-y-0.5">
+            <SidebarItem
+              icon="📊"
+              label="Performance"
+              active={currentView === 'analytics-performance'}
+              onClick={() => { setCurrentView('analytics-performance'); setSelectedProject(null); }}
+            />
+            <SidebarItem
+              icon="💰"
+              label="Cost & Efficiency"
+              active={currentView === 'analytics-cost'}
+              onClick={() => { setCurrentView('analytics-cost'); setSelectedProject(null); }}
+            />
+            <SidebarItem
+              icon="✅"
+              label="Quality Metrics"
+              active={currentView === 'analytics-quality'}
+              onClick={() => { setCurrentView('analytics-quality'); setSelectedProject(null); }}
+            />
+            <SidebarItem
+              icon="⚖️"
+              label="Comparisons"
+              active={currentView === 'analytics-compare'}
+              onClick={() => { setCurrentView('analytics-compare'); setSelectedProject(null); }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="px-3 pt-6">
         <h2 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Settings</h2>
         <div className="space-y-0.5">
-          <SidebarItem
-            icon="🔌"
-            label="Connected Tools"
-            active={currentView === 'tools'}
-            onClick={() => { setCurrentView('tools'); setSelectedProject(null); setSelectedTool(null); }}
-          />
           <SidebarItem
             icon="🎯"
             label="SLAs & Thresholds"
@@ -700,11 +1261,6 @@ const AgentCommandCenter = () => {
         </div>
       </div>
 
-      <div className="mt-auto p-3 border-t border-border-light">
-        <button className="w-full py-2 px-3 bg-sage text-white text-sm font-medium rounded-lg hover:bg-sage-dark transition-colors flex items-center justify-center gap-2">
-          <span className="text-lg">+</span> Create Agent
-        </button>
-      </div>
     </aside>
   );
 
@@ -728,7 +1284,144 @@ const AgentCommandCenter = () => {
   );
 
   // Command Center View
-  const CommandCenterView = () => (
+  const CommandCenterView = () => {
+    // Empty state for first-time users
+    if (isEmptyMode) {
+      return (
+        <div className="flex-1 p-6 overflow-auto bg-cream-light">
+          <div className="max-w-4xl mx-auto">
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">Command Center</h1>
+
+            {/* Welcome Hero */}
+            <div className="bg-white rounded-xl border border-border-light shadow-soft p-8 mb-6">
+              <div className="flex items-start gap-6">
+                <div className="w-16 h-16 bg-sage-tint rounded-2xl flex items-center justify-center flex-shrink-0">
+                  <span className="text-4xl">🚀</span>
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-semibold text-charcoal mb-2">Welcome to Agent Command Center</h2>
+                  <p className="text-muted mb-4">
+                    Build intelligent workflows by combining AI agents with human oversight.
+                    Tell us your goal and we'll help you set everything up.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setCurrentView('project-creator-ai')}
+                      className="px-5 py-2.5 text-sm font-medium text-white bg-sage rounded-lg hover:bg-sage-dark transition-colors inline-flex items-center gap-2"
+                    >
+                      <span>✨</span> Create with AI Assistant
+                    </button>
+                    <button
+                      onClick={() => {
+                        setWizardStep(1);
+                        setNewProject({
+                          name: '',
+                          goal: '',
+                          template: null,
+                          status: 'draft',
+                          agents: [],
+                          sops: [],
+                          tools: [],
+                          people: [],
+                          workflow: { nodes: [], connections: [], triggers: [] }
+                        });
+                        setCurrentView('project-wizard');
+                      }}
+                      className="px-4 py-2.5 text-sm text-charcoal-light hover:text-charcoal transition-colors"
+                    >
+                      Advanced Setup →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Getting Started Checklist */}
+            <div className="bg-white rounded-xl border border-border-light shadow-soft p-6 mb-6">
+              <h3 className="text-sm font-semibold text-charcoal mb-4">Getting Started</h3>
+              <div className="space-y-3">
+                {[
+                  { step: 1, label: 'Create your first project', description: 'Describe your goal and let AI set it up', icon: '✨', done: false, action: () => setCurrentView('project-creator-ai') },
+                  { step: 2, label: 'Add AI agents', description: 'Configure agents for your workflows', icon: '🤖', done: false, action: () => { setEditingAgent(null); setCurrentView('agent-creator-ai'); } },
+                  { step: 3, label: 'Connect your tools', description: 'Integrate with Slack, Google, Salesforce, and more', icon: '🔌', done: false, action: () => setCurrentView('tools') },
+                  { step: 4, label: 'Create or import SOPs', description: 'Define standard operating procedures for your workflows', icon: '📋', done: false, action: () => setCurrentView('building-blocks-sops') },
+                  { step: 5, label: 'Invite your team', description: 'Add team members for human-in-the-loop tasks', icon: '👥', done: false, action: () => setCurrentView('team') },
+                ].map((item) => (
+                  <button
+                    key={item.step}
+                    onClick={item.action}
+                    className="w-full flex items-center gap-4 p-3 rounded-lg hover:bg-cream transition-colors text-left"
+                  >
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${item.done ? 'bg-sage-tint' : 'bg-cream-dark'}`}>
+                      {item.done ? (
+                        <svg className="w-5 h-5 text-sage" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <span className="text-lg">{item.icon}</span>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-charcoal">{item.label}</div>
+                      <div className="text-xs text-muted">{item.description}</div>
+                    </div>
+                    <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Start Templates */}
+            <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+              <h3 className="text-sm font-semibold text-charcoal mb-4">Quick Start Templates</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {projectTemplates.slice(0, 4).map((template) => (
+                  <button
+                    key={template.id}
+                    onClick={() => {
+                      setWizardStep(1);
+                      setNewProject({
+                        name: '',
+                        goal: '',
+                        template: template,
+                        status: 'draft',
+                        agents: [],
+                        sops: [],
+                        tools: [],
+                        people: [],
+                        workflow: { nodes: [], connections: [], triggers: [] }
+                      });
+                      setCurrentView('project-wizard');
+                    }}
+                    className="flex items-start gap-3 p-4 rounded-lg border border-border-light hover:border-sage hover:bg-sage-tint/30 transition-colors text-left"
+                  >
+                    <span className="text-2xl">{template.icon}</span>
+                    <div>
+                      <div className="text-sm font-medium text-charcoal">{template.name}</div>
+                      <div className="text-xs text-muted mt-0.5">{template.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Demo mode toggle - for testing */}
+            <div className="mt-6 flex items-center justify-center">
+              <button
+                onClick={() => setIsEmptyMode(false)}
+                className="text-xs text-muted hover:text-charcoal transition-colors"
+              >
+                View demo with sample data →
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
     <div className="flex-1 p-6 overflow-auto bg-cream-light">
       <div className="max-w-5xl">
         <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">Command Center</h1>
@@ -920,7 +1613,8 @@ const AgentCommandCenter = () => {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // Inbox View
   const InboxView = () => (
@@ -1355,6 +2049,756 @@ const AgentCommandCenter = () => {
       </div>
     </div>
   );
+
+  // Team Agents View
+  const TeamAgentsView = () => (
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
+      <div className="max-w-5xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Agents</h1>
+            <p className="text-sm text-muted mt-1">{allTeamMembers.agents.length} agents across all projects</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="sr-only" htmlFor="agents-project-filter">Filter by project</label>
+            <select id="agents-project-filter" aria-label="Filter by project" className="h-8 px-3 text-sm border border-border-light rounded-lg bg-white">
+              <option>All projects</option>
+              {projects.map(p => <option key={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Total Agents</div>
+            <div className="text-3xl font-semibold text-charcoal">{allTeamMembers.agents.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Active Now</div>
+            <div className="text-3xl font-semibold text-sage">{allTeamMembers.agents.filter(a => a.status === 'active').length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Errors</div>
+            <div className="text-3xl font-semibold text-red-600">{allTeamMembers.agents.filter(a => a.status === 'error').length}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border-light shadow-soft overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-cream border-b border-border-light">
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Agent</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Project</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Autonomy</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Approval Rate</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Tasks</th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-light">
+              {allTeamMembers.agents.map(agent => (
+                <tr
+                  key={agent.id}
+                  onClick={() => { setSelectedAgent(agent); setCurrentView('agent-detail'); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedAgent(agent);
+                      setCurrentView('agent-detail');
+                    }
+                  }}
+                  tabIndex={0}
+                  role="row"
+                  aria-label={`${agent.name}, ${agent.status}, ${agent.autonomy} autonomy`}
+                  className="hover:bg-cream cursor-pointer focus:outline-none focus:bg-teal-tint"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-cream to-cream-dark rounded-lg flex items-center justify-center" aria-hidden="true">
+                        <span className="text-sm">🤖</span>
+                      </div>
+                      <span className="text-sm font-medium text-charcoal">{agent.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{agent.project}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={agent.status} />
+                      <span className={`text-xs capitalize ${
+                        agent.status === 'active' ? 'text-sage' :
+                        agent.status === 'error' ? 'text-red-600' : 'text-muted'
+                      }`}>
+                        {agent.status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <AutonomyIndicator level={agent.autonomy} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-charcoal-light">{agent.approvalRate}%</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-charcoal-light">{agent.tasksCompleted}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-xs text-teal">View →</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Team Humans View
+  const TeamHumansView = () => (
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
+      <div className="max-w-5xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">Humans</h1>
+            <p className="text-sm text-muted mt-1">{allTeamMembers.humans.length} team members across all projects</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="sr-only" htmlFor="humans-project-filter">Filter by project</label>
+            <select id="humans-project-filter" aria-label="Filter by project" className="h-8 px-3 text-sm border border-border-light rounded-lg bg-white">
+              <option>All projects</option>
+              {projects.map(p => <option key={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Total Humans</div>
+            <div className="text-3xl font-semibold text-charcoal">{allTeamMembers.humans.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Total Tasks Completed</div>
+            <div className="text-3xl font-semibold text-sage">{allTeamMembers.humans.reduce((sum, h) => sum + h.tasksCompleted, 0)}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Projects</div>
+            <div className="text-3xl font-semibold text-teal">{[...new Set(allTeamMembers.humans.map(h => h.project))].length}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border-light shadow-soft overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-cream border-b border-border-light">
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Name</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Role</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Project</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Tasks Completed</th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-light">
+              {allTeamMembers.humans.map(human => (
+                <tr
+                  key={human.id}
+                  tabIndex={0}
+                  role="row"
+                  aria-label={`${human.name}, ${human.role}, ${human.project}`}
+                  className="hover:bg-cream cursor-pointer focus:outline-none focus:bg-teal-tint"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-teal-tint to-teal/20 rounded-full flex items-center justify-center text-xs font-medium text-teal-dark" aria-hidden="true">
+                        {human.avatar}
+                      </div>
+                      <span className="text-sm font-medium text-charcoal">{human.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{human.role}</td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{human.project}</td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{human.tasksCompleted}</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-xs text-teal">View Profile →</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Building Blocks - All Agents View
+  const BuildingBlocksAgentsView = () => (
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
+      <div className="max-w-5xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">All Agents</h1>
+            <p className="text-sm text-muted mt-1">{allTeamMembers.agents.length} agents configured in the system</p>
+          </div>
+          <button
+            onClick={() => {
+              setEditingAgent(null);
+              setCurrentView('agent-creator-ai');
+            }}
+            className="px-4 py-2 bg-sage text-white text-sm font-medium rounded-lg hover:bg-sage-dark transition-colors flex items-center gap-2"
+          >
+            <span className="text-lg leading-none">+</span> New Agent
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Total Agents</div>
+            <div className="text-3xl font-semibold text-charcoal">{allTeamMembers.agents.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Assigned to Projects</div>
+            <div className="text-3xl font-semibold text-sage">{allTeamMembers.agents.filter(a => a.project).length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Unassigned</div>
+            <div className="text-3xl font-semibold text-muted">{allTeamMembers.agents.filter(a => !a.project).length}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border-light shadow-soft overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-cream border-b border-border-light">
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Agent</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Project</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Status</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Autonomy</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Approval Rate</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Tasks</th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-light">
+              {allTeamMembers.agents.map(agent => (
+                <tr
+                  key={agent.id}
+                  onClick={() => { setSelectedAgent(agent); setCurrentView('agent-detail'); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedAgent(agent);
+                      setCurrentView('agent-detail');
+                    }
+                  }}
+                  tabIndex={0}
+                  role="row"
+                  aria-label={`${agent.name}, ${agent.status}, ${agent.autonomy} autonomy`}
+                  className="hover:bg-cream cursor-pointer focus:outline-none focus:bg-teal-tint"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-cream to-cream-dark rounded-lg flex items-center justify-center" aria-hidden="true">
+                        <span className="text-sm">🤖</span>
+                      </div>
+                      <span className="text-sm font-medium text-charcoal">{agent.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{agent.project || <span className="text-muted italic">Unassigned</span>}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={agent.status} />
+                      <span className={`text-xs capitalize ${
+                        agent.status === 'active' ? 'text-sage' :
+                        agent.status === 'error' ? 'text-red-600' : 'text-muted'
+                      }`}>
+                        {agent.status}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <AutonomyIndicator level={agent.autonomy} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-charcoal-light">{agent.approvalRate}%</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-charcoal-light">{agent.tasksCompleted}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-xs text-teal">View →</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Building Blocks - All Humans View
+  const BuildingBlocksHumansView = () => (
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
+      <div className="max-w-5xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">All Humans</h1>
+            <p className="text-sm text-muted mt-1">{allTeamMembers.humans.length} team members configured in the system</p>
+          </div>
+          <button className="px-4 py-2 bg-sage text-white text-sm font-medium rounded-lg hover:bg-sage-dark transition-colors flex items-center gap-2">
+            <span className="text-lg leading-none">+</span> Add Team Member
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Total Humans</div>
+            <div className="text-3xl font-semibold text-charcoal">{allTeamMembers.humans.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Assigned to Projects</div>
+            <div className="text-3xl font-semibold text-sage">{allTeamMembers.humans.filter(h => h.project).length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Unassigned</div>
+            <div className="text-3xl font-semibold text-muted">{allTeamMembers.humans.filter(h => !h.project).length}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border-light shadow-soft overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-cream border-b border-border-light">
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Name</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Role</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Project</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Tasks Completed</th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-light">
+              {allTeamMembers.humans.map(human => (
+                <tr
+                  key={human.id}
+                  tabIndex={0}
+                  role="row"
+                  aria-label={`${human.name}, ${human.role}, ${human.project || 'Unassigned'}`}
+                  className="hover:bg-cream cursor-pointer focus:outline-none focus:bg-teal-tint"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-teal-tint to-teal/20 rounded-full flex items-center justify-center text-xs font-medium text-teal-dark" aria-hidden="true">
+                        {human.avatar}
+                      </div>
+                      <span className="text-sm font-medium text-charcoal">{human.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{human.role}</td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{human.project || <span className="text-muted italic">Unassigned</span>}</td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{human.tasksCompleted}</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-xs text-teal">View Profile →</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Building Blocks - All SOPs View
+  const BuildingBlocksSOPsView = () => (
+    <div className="flex-1 p-6 overflow-auto bg-cream-light">
+      <div className="max-w-5xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">All SOPs</h1>
+            <p className="text-sm text-muted mt-1">{sopLibrary.length} Standard Operating Procedures configured in the system</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="px-4 py-2 text-sm font-medium text-teal border border-teal rounded-lg hover:bg-teal-tint transition-colors flex items-center gap-2">
+              Browse SOP Marketplace
+            </button>
+            <button
+              onClick={() => {
+                setSopModalOpen(true);
+                setSopModalState('input');
+                setSopForm({ name: '', description: '', category: 'Sales', files: [] });
+              }}
+              className="px-4 py-2 bg-sage text-white text-sm font-medium rounded-lg hover:bg-sage-dark transition-colors"
+            >
+              Create custom SOP
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Total SOPs</div>
+            <div className="text-3xl font-semibold text-charcoal">{sopLibrary.length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">In Use</div>
+            <div className="text-3xl font-semibold text-sage">{sopLibrary.filter(s => s.usedBy > 0).length}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+            <div className="text-sm text-muted mb-1">Categories</div>
+            <div className="text-3xl font-semibold text-teal">{[...new Set(sopLibrary.map(s => s.category))].length}</div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-border-light shadow-soft overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-cream border-b border-border-light">
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">SOP</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Description</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Category</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Steps</th>
+                <th className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">Used By</th>
+                <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-light">
+              {sopLibrary.map(sop => (
+                <tr
+                  key={sop.id}
+                  tabIndex={0}
+                  role="row"
+                  aria-label={`${sop.name}, ${sop.category}, ${sop.steps} steps`}
+                  className="hover:bg-cream cursor-pointer focus:outline-none focus:bg-teal-tint"
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-cream to-cream-dark rounded-lg flex items-center justify-center" aria-hidden="true">
+                        <span className="text-sm">📋</span>
+                      </div>
+                      <span className="text-sm font-medium text-charcoal">{sop.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light max-w-xs truncate">{sop.description}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex px-2 py-0.5 bg-cream-dark rounded text-xs text-charcoal">{sop.category}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-charcoal-light">{sop.steps}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-charcoal-light">{sop.usedBy} {sop.usedBy === 1 ? 'agent' : 'agents'}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-xs text-teal">View →</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // SOP Modal constants
+  const sopProcessingSteps = [
+    { label: 'Analyzing documents', icon: '📄' },
+    { label: 'Extracting steps', icon: '📝' },
+    { label: 'Building workflow', icon: '⚙️' },
+    { label: 'Done', icon: '✓' }
+  ];
+
+  const sopCategories = ['Sales', 'Finance', 'HR', 'Support', 'Operations', 'Marketing'];
+
+  // SOP Modal handlers
+  const handleSopModalClose = () => {
+    setSopModalOpen(false);
+    setSopModalState('input');
+    setSopProcessingStep(0);
+    setSopForm({ name: '', description: '', category: 'Sales', files: [] });
+    setGeneratedSop(null);
+  };
+
+  const handleSopFileUpload = (e) => {
+    const newFiles = Array.from(e.target.files);
+    setSopForm(prev => ({
+      ...prev,
+      files: [...prev.files, ...newFiles]
+    }));
+  };
+
+  const removeSopFile = (index) => {
+    setSopForm(prev => ({
+      ...prev,
+      files: prev.files.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSopGenerate = async () => {
+    setSopModalState('processing');
+    setSopProcessingStep(0);
+
+    // Simulate multi-step processing
+    for (let step = 0; step < 3; step++) {
+      await new Promise(r => setTimeout(r, 1500));
+      setSopProcessingStep(step + 1);
+    }
+
+    // Generate mock SOP based on form input
+    const mockSop = {
+      id: Date.now(),
+      name: sopForm.name,
+      description: sopForm.description || `Automated procedure for ${sopForm.name.toLowerCase()}`,
+      category: sopForm.category,
+      steps: [
+        { id: 1, name: 'Receive input data', description: 'Capture and validate incoming information' },
+        { id: 2, name: 'Process information', description: 'Apply business rules and transformations' },
+        { id: 3, name: 'Validate results', description: 'Check output against quality criteria' },
+        { id: 4, name: 'Route or complete', description: 'Send to next step or mark as complete' }
+      ],
+      inputs: [
+        { name: 'Primary data source', type: 'data', required: true },
+        { name: 'Configuration parameters', type: 'config', required: false }
+      ],
+      outputs: [
+        { name: 'Processed result', type: 'data' },
+        { name: 'Status report', type: 'text' }
+      ],
+      tools: [1, 2], // Google Workspace, Salesforce
+      usedBy: 0,
+      sourceFiles: sopForm.files.map(f => f.name)
+    };
+
+    await new Promise(r => setTimeout(r, 500));
+    setSopProcessingStep(3);
+    setGeneratedSop(mockSop);
+
+    await new Promise(r => setTimeout(r, 500));
+    setSopModalState('review');
+  };
+
+  const handleSopSave = () => {
+    showToast(`SOP "${generatedSop.name}" created successfully`, 'success');
+    handleSopModalClose();
+  };
+
+  const handleSopEditDetails = () => {
+    setSopModalState('input');
+    setSopProcessingStep(0);
+  };
+
+  // All Projects View
+  const ProjectsListView = () => {
+    // Sorting logic
+    const sortedProjects = [...projects].sort((a, b) => {
+      const { key, direction } = projectsSortConfig;
+      let aVal = a[key];
+      let bVal = b[key];
+
+      // Handle date comparisons
+      if (key === 'dateAdded' || key === 'dateModified' || key === 'lastAccessed') {
+        aVal = new Date(aVal);
+        bVal = new Date(bVal);
+      }
+
+      // Handle string comparisons
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = bVal.toLowerCase();
+      }
+
+      if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+      if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    const handleSort = (key) => {
+      setProjectsSortConfig(prev => ({
+        key,
+        direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+      }));
+    };
+
+    // Sort indicator component
+    const SortIndicator = ({ columnKey }) => {
+      if (projectsSortConfig.key !== columnKey) {
+        return <span className="ml-1 text-muted opacity-50">↕</span>;
+      }
+      return (
+        <span className="ml-1 text-sage">
+          {projectsSortConfig.direction === 'asc' ? '↑' : '↓'}
+        </span>
+      );
+    };
+
+    return (
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
+        <div className="max-w-5xl">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">
+                All Projects
+              </h1>
+              <p className="text-sm text-muted mt-1">{projects.length} projects</p>
+            </div>
+            <button
+              onClick={() => {
+                setWizardStep(1);
+                setNewProject({
+                  name: '',
+                  goal: '',
+                  template: null,
+                  status: 'draft',
+                  agents: [],
+                  sops: [],
+                  tools: [],
+                  people: [],
+                  workflow: { nodes: [], connections: [], triggers: [] }
+                });
+                setCurrentView('project-wizard');
+              }}
+              className="px-3 py-1.5 text-sm text-white bg-sage rounded-lg hover:bg-sage-dark flex items-center gap-1.5"
+            >
+              <span className="text-lg leading-none">+</span> New Project
+            </button>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+              <div className="text-sm text-muted mb-1">Total Projects</div>
+              <div className="text-3xl font-semibold text-charcoal">{projects.length}</div>
+            </div>
+            <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+              <div className="text-sm text-muted mb-1">Running</div>
+              <div className="text-3xl font-semibold text-sage">
+                {projects.filter(p => p.status === 'running').length}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+              <div className="text-sm text-muted mb-1">Waiting</div>
+              <div className="text-3xl font-semibold text-amber">
+                {projects.filter(p => p.status === 'waiting').length}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-border-light p-4 shadow-soft">
+              <div className="text-sm text-muted mb-1">Halted</div>
+              <div className="text-3xl font-semibold text-muted">
+                {projects.filter(p => p.status === 'halted').length}
+              </div>
+            </div>
+          </div>
+
+          {/* Projects Table */}
+          <div className="bg-white rounded-xl border border-border-light shadow-soft overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-cream border-b border-border-light">
+                  <th
+                    onClick={() => handleSort('name')}
+                    className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 cursor-pointer hover:bg-cream-dark select-none"
+                  >
+                    <span className="flex items-center">
+                      Name <SortIndicator columnKey="name" />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort('status')}
+                    className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 cursor-pointer hover:bg-cream-dark select-none"
+                  >
+                    <span className="flex items-center">
+                      Status <SortIndicator columnKey="status" />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort('dateAdded')}
+                    className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 cursor-pointer hover:bg-cream-dark select-none"
+                  >
+                    <span className="flex items-center">
+                      Date Added <SortIndicator columnKey="dateAdded" />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort('dateModified')}
+                    className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 cursor-pointer hover:bg-cream-dark select-none"
+                  >
+                    <span className="flex items-center">
+                      Last Modified <SortIndicator columnKey="dateModified" />
+                    </span>
+                  </th>
+                  <th
+                    onClick={() => handleSort('notifications')}
+                    className="text-left text-xs font-medium text-muted uppercase tracking-wider px-4 py-3 cursor-pointer hover:bg-cream-dark select-none"
+                  >
+                    <span className="flex items-center">
+                      Notifications <SortIndicator columnKey="notifications" />
+                    </span>
+                  </th>
+                  <th className="text-right text-xs font-medium text-muted uppercase tracking-wider px-4 py-3">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-light">
+                {sortedProjects.map(project => (
+                  <tr
+                    key={project.id}
+                    onClick={() => {
+                      setSelectedProject(project);
+                      setCurrentView('project-dashboard');
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedProject(project);
+                        setCurrentView('project-dashboard');
+                      }
+                    }}
+                    tabIndex={0}
+                    role="row"
+                    aria-label={`${project.name}, ${project.status}`}
+                    className="hover:bg-cream cursor-pointer focus:outline-none focus:bg-teal-tint"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-cream to-cream-dark rounded-lg flex items-center justify-center" aria-hidden="true">
+                          <span className="text-sm">📁</span>
+                        </div>
+                        <div>
+                          <span className="text-sm font-medium text-charcoal">{project.name}</span>
+                          <div className="text-xs text-muted">{project.agents} agents · {project.humans} humans</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <ProjectStatusBadge status={project.status} />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-charcoal-light">
+                      {formatDate(project.dateAdded)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-charcoal-light">
+                      {formatDate(project.dateModified)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {project.notifications > 0 ? (
+                        <span className="px-2 py-0.5 text-xs font-medium bg-amber-light/20 text-amber rounded">
+                          {project.notifications}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-xs text-teal">View →</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Reports View
   const ReportsView = () => (
@@ -1840,7 +3284,7 @@ const AgentCommandCenter = () => {
               <div>
                 <h3 className="text-sm font-medium text-charcoal mb-3">Step 1: Authorize Access</h3>
                 <p className="text-sm text-muted mb-4">
-                  Click the button below to authorize AgentOS to access your {selectedTool?.name} account. 
+                  Click the button below to authorize Taiso Zen to access your {selectedTool?.name} account. 
                   You'll be redirected to {selectedTool?.name} to grant permissions.
                 </p>
                 <button className="w-full py-3 bg-teal text-white text-sm font-medium rounded-lg hover:bg-teal-dark flex items-center justify-center gap-2">
@@ -2258,10 +3702,9 @@ const AgentCommandCenter = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1.5 text-sm text-charcoal-light border border-border-light rounded-lg hover:bg-cream">
-                  Edit Agent
-                </button>
+              {/* Action Buttons - Icon with Caption */}
+              <div className="flex items-center gap-1">
+                {/* Run Agent */}
                 <button
                   onClick={async () => {
                     setLoading('run-agent', true);
@@ -2271,13 +3714,54 @@ const AgentCommandCenter = () => {
                   }}
                   disabled={loadingStates['run-agent']}
                   aria-busy={loadingStates['run-agent']}
-                  className={`px-3 py-1.5 text-sm text-white rounded-lg ${
+                  className={`flex flex-col items-center gap-1 px-3 py-2 rounded-lg transition-colors ${
                     loadingStates['run-agent']
-                      ? 'bg-muted cursor-not-allowed'
-                      : 'bg-charcoal hover:bg-charcoal-light'
+                      ? 'text-muted cursor-not-allowed'
+                      : 'text-sage hover:bg-sage-tint'
                   }`}
                 >
-                  {loadingStates['run-agent'] ? 'Starting...' : 'Run Agent Now'}
+                  <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  <span className="text-xs font-medium">{loadingStates['run-agent'] ? 'Starting...' : 'Run'}</span>
+                </button>
+
+                {/* Edit Agent */}
+                <button
+                  onClick={() => {
+                    setEditingAgent(selectedAgent);
+                    setCurrentView('agent-creator-ai');
+                  }}
+                  className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-charcoal-light hover:bg-cream transition-colors"
+                >
+                  <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                  </svg>
+                  <span className="text-xs font-medium">Edit</span>
+                </button>
+
+                {/* Delete Agent */}
+                <button
+                  onClick={() => {
+                    setConfirmDialog({
+                      title: 'Delete Agent?',
+                      message: `This will permanently delete "${selectedAgent?.name}" and all its configuration. This action cannot be undone.`,
+                      confirmLabel: 'Delete Agent',
+                      confirmStyle: 'destructive',
+                      onConfirm: () => {
+                        showToast(`Agent "${selectedAgent?.name}" deleted`, 'success');
+                        setSelectedAgent(null);
+                        setCurrentView('team-agents');
+                        setConfirmDialog(null);
+                      }
+                    });
+                  }}
+                  className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span className="text-xs font-medium">Delete</span>
                 </button>
               </div>
             </div>
@@ -2431,9 +3915,493 @@ const AgentCommandCenter = () => {
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );
+
+  // Agent Create/Edit Form View
+  const AgentFormView = () => {
+    const isEditMode = currentView === 'agent-edit' && editingAgent !== null;
+
+    // Initialize form state
+    const [agentForm, setAgentForm] = useState(() => {
+      if (isEditMode && editingAgent) {
+        return {
+          name: editingAgent.name || '',
+          project: editingAgent.project || '',
+          autonomy: editingAgent.autonomy || 'supervised',
+          objective: editingAgent.objective || '',
+          instructions: editingAgent.instructions || [''],
+          triggers: editingAgent.triggers || [],
+          tools: editingAgent.tools || [],
+          sops: editingAgent.sops || []
+        };
+      }
+      return {
+        name: '',
+        project: '',
+        autonomy: 'supervised',
+        objective: '',
+        instructions: [''],
+        triggers: [],
+        tools: [],
+        sops: []
+      };
+    });
+
+    // Available trigger options
+    const triggerOptions = [
+      { id: 'new-lead', label: 'New lead arrives in CRM', icon: '📥' },
+      { id: 'schedule-daily', label: 'Scheduled (daily)', icon: '📅' },
+      { id: 'schedule-weekly', label: 'Scheduled (weekly)', icon: '📆' },
+      { id: 'manual', label: 'Manual trigger only', icon: '👆' },
+      { id: 'form-submission', label: 'On form submission', icon: '📝' },
+      { id: 'email-received', label: 'Email received', icon: '📧' },
+    ];
+
+    // Autonomy level options with descriptions
+    const autonomyLevels = [
+      { value: 'supervised', label: 'Supervised', description: 'Agent requires human approval for all actions', icon: '👀' },
+      { value: 'assisted', label: 'Assisted', description: 'Agent can act independently but escalates complex decisions', icon: '🤝' },
+      { value: 'autonomous', label: 'Autonomous', description: 'Agent operates fully independently within defined bounds', icon: '🚀' },
+    ];
+
+    // Validation
+    const isValid = agentForm.name.trim() !== '' &&
+                    agentForm.project !== '' &&
+                    agentForm.instructions.filter(i => i.trim()).length > 0;
+
+    // Handle instruction changes
+    const updateInstruction = (index, value) => {
+      const newInstructions = [...agentForm.instructions];
+      newInstructions[index] = value;
+      setAgentForm({ ...agentForm, instructions: newInstructions });
+    };
+
+    const addInstruction = () => {
+      setAgentForm({ ...agentForm, instructions: [...agentForm.instructions, ''] });
+    };
+
+    const removeInstruction = (index) => {
+      if (agentForm.instructions.length > 1) {
+        const newInstructions = agentForm.instructions.filter((_, i) => i !== index);
+        setAgentForm({ ...agentForm, instructions: newInstructions });
+      }
+    };
+
+    // Handle trigger toggle
+    const toggleTrigger = (triggerId) => {
+      const newTriggers = agentForm.triggers.includes(triggerId)
+        ? agentForm.triggers.filter(t => t !== triggerId)
+        : [...agentForm.triggers, triggerId];
+      setAgentForm({ ...agentForm, triggers: newTriggers });
+    };
+
+    // Handle tool toggle
+    const toggleTool = (toolId) => {
+      const newTools = agentForm.tools.includes(toolId)
+        ? agentForm.tools.filter(t => t !== toolId)
+        : [...agentForm.tools, toolId];
+      setAgentForm({ ...agentForm, tools: newTools });
+    };
+
+    // Handle SOP toggle
+    const toggleSOP = (sopId) => {
+      const newSOPs = agentForm.sops.includes(sopId)
+        ? agentForm.sops.filter(s => s !== sopId)
+        : [...agentForm.sops, sopId];
+      setAgentForm({ ...agentForm, sops: newSOPs });
+    };
+
+    // Handle form submission
+    const handleSubmit = () => {
+      if (!isValid) return;
+
+      const agentData = {
+        ...agentForm,
+        id: isEditMode ? editingAgent.id : Date.now(),
+        status: isEditMode ? editingAgent.status : 'idle',
+        approvalRate: isEditMode ? editingAgent.approvalRate : 0,
+        tasksCompleted: isEditMode ? editingAgent.tasksCompleted : 0,
+        instructions: agentForm.instructions.filter(i => i.trim()),
+      };
+
+      if (isEditMode) {
+        // Update existing agent in allTeamMembers (in a real app, this would be an API call)
+        showToast(`Agent "${agentData.name}" updated successfully`);
+      } else {
+        // Add new agent (in a real app, this would be an API call)
+        showToast(`Agent "${agentData.name}" created successfully`);
+      }
+
+      // Navigate back
+      if (isEditMode) {
+        setSelectedAgent(agentData);
+        setCurrentView('agent-detail');
+      } else {
+        setCurrentView('team-agents');
+      }
+      setEditingAgent(null);
+    };
+
+    // Handle cancel
+    const handleCancel = () => {
+      if (isEditMode) {
+        setCurrentView('agent-detail');
+      } else {
+        setCurrentView('team-agents');
+      }
+      setEditingAgent(null);
+    };
+
+    return (
+      <div className="flex-1 p-6 overflow-auto bg-cream-light">
+        <div className="max-w-5xl mx-auto">
+          {/* Cancel Link */}
+          <button
+            onClick={handleCancel}
+            className="text-sm text-muted hover:text-charcoal mb-4 flex items-center gap-1"
+          >
+            ← Cancel
+          </button>
+
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal outline-none">
+                {isEditMode ? `Edit Agent: ${editingAgent?.name}` : 'Create New Agent'}
+              </h1>
+              <p className="text-sm text-muted mt-1">
+                {isEditMode ? 'Modify agent configuration and behavior.' : 'Configure a new AI agent to automate tasks.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 text-sm text-charcoal-light hover:text-charcoal"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={!isValid}
+                className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  isValid
+                    ? 'bg-teal text-white hover:bg-teal-dark'
+                    : 'bg-border-light text-muted cursor-not-allowed'
+                }`}
+              >
+                {isEditMode ? 'Save Changes' : 'Create Agent'}
+              </button>
+            </div>
+          </div>
+
+          {/* Form Content - Two Column Layout */}
+          <div className="grid grid-cols-3 gap-6">
+            {/* Left Column - Main Form (2/3 width) */}
+            <div className="col-span-2 space-y-6">
+              {/* Basic Information Card */}
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+                <h2 className="text-lg font-medium text-charcoal mb-4">Basic Information</h2>
+                <div className="space-y-6">
+                  {/* Agent Name */}
+                  <div>
+                    <label htmlFor="agent-name" className="block text-sm font-medium text-charcoal mb-2">
+                      Agent Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="agent-name"
+                      type="text"
+                      value={agentForm.name}
+                      onChange={(e) => setAgentForm({ ...agentForm, name: e.target.value })}
+                      placeholder="e.g., Lead Qualifier, Invoice Processor"
+                      className="w-full h-10 px-3 border border-border-light rounded-lg text-sm focus:outline-none focus:border-teal"
+                    />
+                  </div>
+
+                  {/* Project Assignment */}
+                  <div>
+                    <label htmlFor="agent-project" className="block text-sm font-medium text-charcoal mb-2">
+                      Project Assignment <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="agent-project"
+                      value={agentForm.project}
+                      onChange={(e) => setAgentForm({ ...agentForm, project: e.target.value })}
+                      className="w-full h-10 px-3 border border-border-light rounded-lg text-sm focus:outline-none focus:border-teal bg-white"
+                    >
+                      <option value="">Select a project...</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.name}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Autonomy Level */}
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-3">
+                      Autonomy Level <span className="text-red-500">*</span>
+                    </label>
+                    <div className="space-y-2">
+                      {autonomyLevels.map((level) => (
+                        <label
+                          key={level.value}
+                          className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            agentForm.autonomy === level.value
+                              ? 'border-teal bg-teal-tint ring-2 ring-teal/20'
+                              : 'border-border-light hover:border-border'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="autonomy"
+                            value={level.value}
+                            checked={agentForm.autonomy === level.value}
+                            onChange={(e) => setAgentForm({ ...agentForm, autonomy: e.target.value })}
+                            className="sr-only"
+                          />
+                          <span className="text-lg">{level.icon}</span>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium text-charcoal">{level.label}</div>
+                            <div className="text-xs text-muted mt-0.5">{level.description}</div>
+                          </div>
+                          <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                            agentForm.autonomy === level.value ? 'border-teal bg-teal' : 'border-border'
+                          }`}>
+                            {agentForm.autonomy === level.value && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Objective & Instructions Card */}
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+                <h2 className="text-lg font-medium text-charcoal mb-4">Objective & Instructions</h2>
+                <div className="space-y-6">
+                  {/* Objective */}
+                  <div>
+                    <label htmlFor="agent-objective" className="block text-sm font-medium text-charcoal mb-2">
+                      Objective
+                    </label>
+                    <textarea
+                      id="agent-objective"
+                      value={agentForm.objective}
+                      onChange={(e) => setAgentForm({ ...agentForm, objective: e.target.value })}
+                      placeholder="Describe what this agent should accomplish..."
+                      rows={3}
+                      className="w-full px-3 py-2 border border-border-light rounded-lg text-sm focus:outline-none focus:border-teal resize-none"
+                    />
+                  </div>
+
+                  {/* Instructions */}
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-2">
+                      Instructions <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-xs text-muted mb-3">Define the step-by-step procedure this agent should follow.</p>
+                    <div className="space-y-2">
+                      {agentForm.instructions.map((instruction, index) => (
+                        <div key={index} className="flex items-start gap-2">
+                          <span className="w-6 h-8 flex items-center justify-center text-xs text-muted font-medium">
+                            {index + 1}.
+                          </span>
+                          <input
+                            type="text"
+                            value={instruction}
+                            onChange={(e) => updateInstruction(index, e.target.value)}
+                            placeholder={`Step ${index + 1}...`}
+                            className="flex-1 h-8 px-3 border border-border-light rounded-lg text-sm focus:outline-none focus:border-teal"
+                          />
+                          {agentForm.instructions.length > 1 && (
+                            <button
+                              onClick={() => removeInstruction(index)}
+                              className="w-8 h-8 flex items-center justify-center text-muted hover:text-red-500 transition-colors"
+                              title="Remove step"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={addInstruction}
+                      className="mt-3 text-sm text-teal hover:text-teal-dark flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add Step
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit Mode: Read-only Stats */}
+              {isEditMode && editingAgent && (
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+                  <h2 className="text-lg font-medium text-charcoal mb-4">Performance Stats</h2>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="p-4 bg-cream rounded-lg">
+                      <div className="text-2xl font-semibold text-charcoal">{editingAgent.tasksCompleted}</div>
+                      <div className="text-xs text-muted mt-1">Tasks Completed</div>
+                    </div>
+                    <div className="p-4 bg-cream rounded-lg">
+                      <div className="text-2xl font-semibold text-charcoal">{editingAgent.approvalRate}%</div>
+                      <div className="text-xs text-muted mt-1">Approval Rate</div>
+                    </div>
+                    <div className="p-4 bg-cream rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={editingAgent.status} />
+                        <span className="text-sm font-medium text-charcoal capitalize">{editingAgent.status}</span>
+                      </div>
+                      <div className="text-xs text-muted mt-1">Current Status</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column - Configuration (1/3 width) */}
+            <div className="space-y-6">
+              {/* Triggers Card */}
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+                <h2 className="text-sm font-medium text-charcoal mb-3">Triggers</h2>
+                <p className="text-xs text-muted mb-4">When should this agent run?</p>
+                <div className="space-y-2">
+                  {triggerOptions.map((trigger) => {
+                    const isSelected = agentForm.triggers.includes(trigger.id);
+                    return (
+                      <label
+                        key={trigger.id}
+                        className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-teal bg-teal-tint'
+                            : 'border-border-light hover:border-border'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleTrigger(trigger.id)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm">{trigger.icon}</span>
+                        <span className="text-sm text-charcoal flex-1">{trigger.label}</span>
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center ${
+                          isSelected ? 'border-teal bg-teal' : 'border-border'
+                        }`}>
+                          {isSelected && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Tools Card */}
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+                <h2 className="text-sm font-medium text-charcoal mb-3">Tools</h2>
+                <p className="text-xs text-muted mb-4">Which tools can this agent use?</p>
+                <div className="space-y-2">
+                  {tools.filter(t => t.status === 'connected').map((tool) => {
+                    const isSelected = agentForm.tools.includes(tool.id);
+                    return (
+                      <label
+                        key={tool.id}
+                        className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-teal bg-teal-tint'
+                            : 'border-border-light hover:border-border'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleTool(tool.id)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm">{tool.icon}</span>
+                        <span className="text-sm text-charcoal flex-1">{tool.name}</span>
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center ${
+                          isSelected ? 'border-teal bg-teal' : 'border-border'
+                        }`}>
+                          {isSelected && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                  {tools.filter(t => t.status === 'connected').length === 0 && (
+                    <p className="text-xs text-muted italic">No tools connected. Connect tools in Settings.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* SOPs Card */}
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
+                <h2 className="text-sm font-medium text-charcoal mb-3">SOPs</h2>
+                <p className="text-xs text-muted mb-4">Which procedures should this agent follow?</p>
+                <div className="space-y-2">
+                  {sopLibrary.map((sop) => {
+                    const isSelected = agentForm.sops.includes(sop.id);
+                    return (
+                      <label
+                        key={sop.id}
+                        className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-teal bg-teal-tint'
+                            : 'border-border-light hover:border-border'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSOP(sop.id)}
+                          className="sr-only"
+                        />
+                        <span className="text-sm">📋</span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm text-charcoal block truncate">{sop.name}</span>
+                          <span className="text-xs text-muted">{sop.steps} steps</span>
+                        </div>
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                          isSelected ? 'border-teal bg-teal' : 'border-border'
+                        }`}>
+                          {isSelected && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Performance Dashboard View (Analytics)
   const PerformanceDashboardView = () => {
@@ -3523,6 +5491,1731 @@ const AgentCommandCenter = () => {
     </div>
   );
 
+  // ============================================
+  // AI PROJECT CREATOR VIEW
+  // ============================================
+
+  const AIProjectCreatorView = () => {
+    const [messages, setMessages] = useState([
+      {
+        role: 'assistant',
+        content: "Hi! I'm here to help you create a new project. Tell me about what you're trying to accomplish — what's the main goal or problem you want to solve?",
+        type: 'greeting'
+      }
+    ]);
+    const [inputValue, setInputValue] = useState('');
+    const [phase, setPhase] = useState(CONVERSATION_PHASES.GREETING);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [responses, setResponses] = useState({});
+    const [generatedBlocks, setGeneratedBlocks] = useState({ agents: [], sops: [] });
+    const [project, setProject] = useState({
+      name: '',
+      goal: '',
+      agents: [],
+      sops: [],
+      tools: [],
+      people: [],
+      workflow: { nodes: [], connections: [], triggers: [] }
+    });
+    const [editingBlock, setEditingBlock] = useState(null);
+    const [selectedOptions, setSelectedOptions] = useState([]);
+    const messagesEndRef = useRef(null);
+
+    // Auto-scroll to bottom when new messages arrive
+    useEffect(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    // Process user input based on current phase
+    const handleSendMessage = async (text) => {
+      if (!text.trim() || isProcessing) return;
+
+      // Add user message
+      setMessages(prev => [...prev, { role: 'user', content: text }]);
+      setInputValue('');
+      setIsProcessing(true);
+
+      // Simulate AI processing delay
+      await new Promise(r => setTimeout(r, 800));
+
+      // Handle based on phase
+      if (phase === CONVERSATION_PHASES.GREETING || phase === CONVERSATION_PHASES.GOAL_DISCOVERY) {
+        // Parse goal and move to scope clarification
+        const matchedPattern = matchGoalPattern(text);
+        setResponses(prev => ({ ...prev, projectGoal: text, matchedPattern }));
+        setProject(prev => ({
+          ...prev,
+          name: matchedPattern.suggestedName,
+          goal: text
+        }));
+
+        // Generate building blocks based on pattern
+        const newAgents = matchedPattern.suggestedAgents.map((a, i) => ({
+          id: generateId(),
+          ...a,
+          status: 'idle',
+          approvalRate: 0,
+          tasksCompleted: 0,
+          tools: matchedPattern.suggestedTools,
+          sops: [],
+          instructions: [`Primary objective: ${a.objective}`],
+          triggers: []
+        }));
+
+        const newSOPs = matchedPattern.suggestedSOPs.map((s, i) => ({
+          id: generateId(),
+          ...s,
+          inputs: [{ name: 'Primary input', type: 'data', required: true }],
+          outputs: [{ name: 'Processed result', type: 'data' }],
+          tools: matchedPattern.suggestedTools,
+          usedBy: 0,
+          sourceFiles: []
+        }));
+
+        setGeneratedBlocks({ agents: newAgents, sops: newSOPs });
+
+        // Add AI response
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `Great! Based on your goal, I've drafted a **${matchedPattern.suggestedName}** project. I've suggested ${newAgents.length} agents and ${newSOPs.length} SOPs to get you started.\n\nTake a look at the preview on the right — you can click any item to edit it. When you're ready, let's choose which tools your agents should use.`,
+          type: 'scope_response'
+        }]);
+
+        setPhase(CONVERSATION_PHASES.TOOL_SELECTION);
+        setSelectedOptions(matchedPattern.suggestedTools);
+
+        // Add tool selection question
+        setTimeout(() => {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Which tools should your agents have access to?',
+            type: 'question',
+            questionType: 'multi-select',
+            options: availableTools.map(t => ({
+              id: t.id,
+              label: t.name,
+              icon: t.icon,
+              description: t.category,
+              recommended: matchedPattern.suggestedTools.includes(t.id)
+            }))
+          }]);
+        }, 500);
+      }
+
+      setIsProcessing(false);
+    };
+
+    // Handle option selection for questions
+    const handleOptionSelect = async (optionId) => {
+      if (phase === CONVERSATION_PHASES.TOOL_SELECTION) {
+        setSelectedOptions(prev =>
+          prev.includes(optionId)
+            ? prev.filter(id => id !== optionId)
+            : [...prev, optionId]
+        );
+      } else if (phase === CONVERSATION_PHASES.AUTONOMY_LEVEL) {
+        // Single select - immediately proceed
+        setResponses(prev => ({ ...prev, autonomyLevel: optionId }));
+
+        // Update all agents with selected autonomy
+        setGeneratedBlocks(prev => ({
+          ...prev,
+          agents: prev.agents.map(a => ({ ...a, autonomy: optionId }))
+        }));
+
+        setMessages(prev => [...prev,
+          { role: 'user', content: optionId === 'supervised' ? 'Supervised - approve all actions' : optionId === 'assisted' ? 'Assisted - escalate complex decisions' : 'Autonomous - work independently' }
+        ]);
+
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to human touchpoints
+        setPhase(CONVERSATION_PHASES.HUMAN_TOUCHPOINTS);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'When should a human get involved? Select the checkpoints that make sense for your workflow:',
+          type: 'question',
+          questionType: 'multi-select',
+          options: [
+            { id: 'external-comms', label: 'Before external communications', icon: '📧', description: 'Review emails before sending' },
+            { id: 'errors', label: 'When errors occur', icon: '⚠️', description: 'Escalate issues for resolution' },
+            { id: 'low-confidence', label: 'Low confidence decisions', icon: '🤔', description: 'When agent is uncertain' },
+            { id: 'final-approval', label: 'Final approval', icon: '✅', description: 'Review before completing tasks' }
+          ]
+        }]);
+        setSelectedOptions(['external-comms', 'errors']);
+        setIsProcessing(false);
+      }
+    };
+
+    // Handle multi-select confirmation
+    const handleConfirmSelection = async () => {
+      if (phase === CONVERSATION_PHASES.TOOL_SELECTION) {
+        setResponses(prev => ({ ...prev, selectedTools: selectedOptions }));
+        setProject(prev => ({ ...prev, tools: selectedOptions }));
+
+        // Update agents with selected tools
+        setGeneratedBlocks(prev => ({
+          ...prev,
+          agents: prev.agents.map(a => ({ ...a, tools: selectedOptions }))
+        }));
+
+        const selectedToolNames = availableTools
+          .filter(t => selectedOptions.includes(t.id))
+          .map(t => t.name)
+          .join(', ');
+
+        setMessages(prev => [...prev,
+          { role: 'user', content: `Selected: ${selectedToolNames}` }
+        ]);
+
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to autonomy level
+        setPhase(CONVERSATION_PHASES.AUTONOMY_LEVEL);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'How much independence should your AI agents have?',
+          type: 'question',
+          questionType: 'single-select',
+          options: [
+            { id: 'supervised', label: 'Supervised', icon: '👀', description: 'Human approves all agent actions' },
+            { id: 'assisted', label: 'Assisted', icon: '🤝', description: 'Agents escalate complex decisions' },
+            { id: 'autonomous', label: 'Autonomous', icon: '🚀', description: 'Agents work independently within bounds' }
+          ]
+        }]);
+        setSelectedOptions([]);
+        setIsProcessing(false);
+
+      } else if (phase === CONVERSATION_PHASES.HUMAN_TOUCHPOINTS) {
+        setResponses(prev => ({ ...prev, humanTouchpoints: selectedOptions }));
+
+        setMessages(prev => [...prev,
+          { role: 'user', content: `Selected: ${selectedOptions.map(o => o === 'external-comms' ? 'Before external comms' : o === 'errors' ? 'On errors' : o === 'low-confidence' ? 'Low confidence' : 'Final approval').join(', ')}` }
+        ]);
+
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 800));
+
+        // Build workflow
+        const workflow = buildWorkflow(generatedBlocks.agents, selectedOptions);
+        setProject(prev => ({
+          ...prev,
+          workflow,
+          agents: generatedBlocks.agents.map(a => a.id),
+          sops: generatedBlocks.sops.map(s => s.id)
+        }));
+
+        // Move to review
+        setPhase(CONVERSATION_PHASES.REVIEW);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `Your project is ready! I've created **${project.name || 'your project'}** with ${generatedBlocks.agents.length} agents and ${generatedBlocks.sops.length} SOPs.\n\nReview everything in the preview panel. You can click any item to make changes. When you're satisfied, hit **Create Project** to launch!`,
+          type: 'review'
+        }]);
+        setIsProcessing(false);
+      }
+    };
+
+    // Build workflow from agents and touchpoints
+    const buildWorkflow = (agents, touchpoints) => {
+      const nodes = [
+        { id: 'start', type: 'start', name: 'Start', position: { x: 50, y: 150 } }
+      ];
+      const connections = [];
+      let xOffset = 200;
+      let lastNodeId = 'start';
+
+      agents.forEach((agent, i) => {
+        const nodeId = `agent-${agent.id}`;
+        nodes.push({
+          id: nodeId,
+          type: 'agent',
+          entityId: agent.id,
+          name: agent.name,
+          position: { x: xOffset, y: 100 + (i % 2) * 100 }
+        });
+        connections.push({ from: lastNodeId, to: nodeId });
+        lastNodeId = nodeId;
+        xOffset += 180;
+      });
+
+      // Add human node if touchpoints selected
+      if (touchpoints.length > 0) {
+        const humanNode = {
+          id: 'human-review',
+          type: 'person',
+          name: 'Human Review',
+          position: { x: xOffset, y: 150 }
+        };
+        nodes.push(humanNode);
+        connections.push({ from: lastNodeId, to: 'human-review' });
+        lastNodeId = 'human-review';
+        xOffset += 180;
+      }
+
+      nodes.push({
+        id: 'end',
+        type: 'end',
+        name: 'Complete',
+        position: { x: xOffset, y: 150 }
+      });
+      connections.push({ from: lastNodeId, to: 'end' });
+
+      return { nodes, connections, triggers: [] };
+    };
+
+    // Handle project creation
+    const handleCreateProject = () => {
+      showToast(`Project "${project.name}" created successfully!`, 'success');
+      // Reset state and navigate
+      setCurrentView('command-center');
+    };
+
+    // Handle inline editing
+    const handleEditBlock = (type, index) => {
+      setEditingBlock({ type, index });
+    };
+
+    const handleSaveBlockEdit = (type, index, updatedBlock) => {
+      if (type === 'agent') {
+        setGeneratedBlocks(prev => ({
+          ...prev,
+          agents: prev.agents.map((a, i) => i === index ? { ...a, ...updatedBlock } : a)
+        }));
+      } else if (type === 'sop') {
+        setGeneratedBlocks(prev => ({
+          ...prev,
+          sops: prev.sops.map((s, i) => i === index ? { ...s, ...updatedBlock } : s)
+        }));
+      }
+      setEditingBlock(null);
+    };
+
+    const handleDeleteBlock = (type, index) => {
+      if (type === 'agent') {
+        setGeneratedBlocks(prev => ({
+          ...prev,
+          agents: prev.agents.filter((_, i) => i !== index)
+        }));
+      } else if (type === 'sop') {
+        setGeneratedBlocks(prev => ({
+          ...prev,
+          sops: prev.sops.filter((_, i) => i !== index)
+        }));
+      }
+      setEditingBlock(null);
+    };
+
+    // Quick suggestions for initial prompt
+    const quickSuggestions = [
+      'Automate sales lead qualification',
+      'Process invoices automatically',
+      'Handle customer support tickets',
+      'Streamline HR onboarding'
+    ];
+
+    return (
+      <div className="flex-1 flex bg-cream-light overflow-hidden">
+        {/* Left Panel - Conversation */}
+        <div className="w-2/5 flex flex-col border-r border-border-light bg-white">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border-light">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setCurrentView('command-center')}
+                className="p-1.5 text-muted hover:text-charcoal rounded-lg hover:bg-cream transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-lg font-semibold text-charcoal">Create Project</h1>
+                <p className="text-xs text-muted">AI-assisted setup</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'assistant' ? (
+                  <div className="max-w-[90%] space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal to-sage flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs">✨</span>
+                      </div>
+                      <div className="bg-cream rounded-2xl rounded-tl-sm px-4 py-2.5">
+                        <p className="text-sm text-charcoal whitespace-pre-wrap">
+                          {msg.content.split('**').map((part, j) =>
+                            j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Question options */}
+                    {msg.type === 'question' && msg.questionType === 'multi-select' && (
+                      <div className="ml-9 space-y-2">
+                        {msg.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleOptionSelect(opt.id)}
+                            className={`w-full p-3 rounded-xl border text-left transition-all ${
+                              selectedOptions.includes(opt.id)
+                                ? 'border-teal bg-teal-tint'
+                                : 'border-border-light hover:border-border bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{opt.icon}</span>
+                                <div>
+                                  <div className="text-sm font-medium text-charcoal">
+                                    {opt.label}
+                                    {opt.recommended && (
+                                      <span className="ml-2 px-1.5 py-0.5 bg-sage-tint text-sage text-xs rounded">
+                                        Recommended
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted">{opt.description}</div>
+                                </div>
+                              </div>
+                              <span className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                selectedOptions.includes(opt.id) ? 'border-teal bg-teal' : 'border-border'
+                              }`}>
+                                {selectedOptions.includes(opt.id) && (
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                        <button
+                          onClick={handleConfirmSelection}
+                          disabled={selectedOptions.length === 0}
+                          className="w-full mt-2 px-4 py-2 text-sm font-medium text-white bg-teal rounded-lg hover:bg-teal-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Continue with {selectedOptions.length} selected
+                        </button>
+                      </div>
+                    )}
+
+                    {msg.type === 'question' && msg.questionType === 'single-select' && (
+                      <div className="ml-9 space-y-2">
+                        {msg.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleOptionSelect(opt.id)}
+                            className="w-full p-3 rounded-xl border border-border-light hover:border-teal hover:bg-teal-tint/30 text-left transition-all bg-white"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{opt.icon}</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">{opt.label}</div>
+                                <div className="text-xs text-muted">{opt.description}</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="max-w-[80%] bg-charcoal text-white rounded-2xl rounded-br-sm px-4 py-2.5">
+                    <p className="text-sm">{msg.content}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Processing indicator */}
+            {isProcessing && (
+              <div className="flex items-center gap-2 p-3">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-muted">Thinking...</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-border-light">
+            {/* Quick suggestions - only show at start */}
+            {phase === CONVERSATION_PHASES.GREETING && messages.length === 1 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {quickSuggestions.map((suggestion, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setInputValue(suggestion)}
+                    className="px-3 py-1.5 text-xs bg-cream-dark rounded-full hover:bg-cream text-charcoal-light transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {phase !== CONVERSATION_PHASES.REVIEW ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
+                  placeholder="Type your response..."
+                  className="flex-1 px-4 py-2.5 text-sm border border-border-light rounded-xl focus:outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+                  disabled={isProcessing || (phase !== CONVERSATION_PHASES.GREETING && phase !== CONVERSATION_PHASES.GOAL_DISCOVERY)}
+                />
+                <button
+                  onClick={() => handleSendMessage(inputValue)}
+                  disabled={!inputValue.trim() || isProcessing}
+                  className="px-4 py-2.5 bg-teal text-white rounded-xl hover:bg-teal-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleCreateProject}
+                className="w-full px-4 py-3 text-sm font-medium text-white bg-sage rounded-xl hover:bg-sage-dark transition-colors flex items-center justify-center gap-2"
+              >
+                <span>🚀</span> Create Project
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel - Preview */}
+        <div className="flex-1 p-6 overflow-y-auto">
+          <div className="max-w-2xl mx-auto space-y-6">
+            {/* Project Header */}
+            {project.name && (
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-5 animate-fadeIn">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-sage-tint rounded-xl flex items-center justify-center">
+                    <span className="text-2xl">📁</span>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-charcoal">{project.name}</h2>
+                    <p className="text-sm text-muted mt-0.5">{project.goal}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Building Blocks */}
+            {(generatedBlocks.agents.length > 0 || generatedBlocks.sops.length > 0) && (
+              <div className="grid grid-cols-2 gap-4">
+                {/* Agents */}
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-4">
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span>🤖</span> Agents ({generatedBlocks.agents.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {generatedBlocks.agents.map((agent, i) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => handleEditBlock('agent', i)}
+                        className="w-full p-3 rounded-lg border border-border-light hover:border-teal hover:bg-teal-tint/20 text-left transition-all group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium text-charcoal">{agent.name}</div>
+                            <div className="text-xs text-muted capitalize">{agent.autonomy}</div>
+                          </div>
+                          <svg className="w-4 h-4 text-muted opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* SOPs */}
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-4">
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span>📋</span> SOPs ({generatedBlocks.sops.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {generatedBlocks.sops.map((sop, i) => (
+                      <button
+                        key={sop.id}
+                        onClick={() => handleEditBlock('sop', i)}
+                        className="w-full p-3 rounded-lg border border-border-light hover:border-teal hover:bg-teal-tint/20 text-left transition-all group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm font-medium text-charcoal">{sop.name}</div>
+                            <div className="text-xs text-muted">{sop.steps?.length || 0} steps</div>
+                          </div>
+                          <svg className="w-4 h-4 text-muted opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tools */}
+            {project.tools.length > 0 && (
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-4">
+                <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                  <span>🔌</span> Connected Tools ({project.tools.length})
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {project.tools.map(toolId => {
+                    const tool = availableTools.find(t => t.id === toolId);
+                    return tool ? (
+                      <span key={toolId} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream rounded-lg text-sm">
+                        <span>{tool.icon}</span>
+                        <span className="text-charcoal">{tool.name}</span>
+                      </span>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Mini Workflow Preview */}
+            {project.workflow.nodes.length > 0 && (
+              <div className="bg-white rounded-xl border border-border-light shadow-soft p-4">
+                <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                  <span>⚡</span> Workflow
+                </h3>
+                <div className="flex items-center gap-2 overflow-x-auto py-2">
+                  {project.workflow.nodes.map((node, i) => (
+                    <React.Fragment key={node.id}>
+                      <div className={`flex-shrink-0 px-3 py-2 rounded-lg text-sm ${
+                        node.type === 'start' ? 'bg-cream-dark text-charcoal' :
+                        node.type === 'end' ? 'bg-cream-dark text-charcoal' :
+                        node.type === 'agent' ? 'bg-teal-tint text-teal-dark' :
+                        'bg-purple-tint text-purple-dark'
+                      }`}>
+                        <span className="mr-1">
+                          {node.type === 'start' ? '○' : node.type === 'end' ? '●' : node.type === 'agent' ? '🤖' : '👤'}
+                        </span>
+                        {node.name}
+                      </div>
+                      {i < project.workflow.nodes.length - 1 && (
+                        <svg className="w-4 h-4 text-muted flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!project.name && generatedBlocks.agents.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <div className="w-16 h-16 bg-cream rounded-2xl flex items-center justify-center mb-4">
+                  <span className="text-3xl opacity-50">✨</span>
+                </div>
+                <h3 className="text-lg font-medium text-charcoal mb-2">Your project will appear here</h3>
+                <p className="text-sm text-muted max-w-sm">
+                  Start by telling the AI assistant what you want to accomplish, and watch your project take shape.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Inline Edit Modal */}
+        {editingBlock && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setEditingBlock(null)} />
+            <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-charcoal">
+                  Edit {editingBlock.type === 'agent' ? 'Agent' : 'SOP'}
+                </h3>
+                <button
+                  onClick={() => setEditingBlock(null)}
+                  className="p-1 text-muted hover:text-charcoal rounded transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {editingBlock.type === 'agent' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1">Name</label>
+                    <input
+                      type="text"
+                      defaultValue={generatedBlocks.agents[editingBlock.index]?.name}
+                      onChange={(e) => {
+                        const updated = { ...generatedBlocks.agents[editingBlock.index], name: e.target.value };
+                        handleSaveBlockEdit('agent', editingBlock.index, updated);
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:border-teal"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1">Objective</label>
+                    <textarea
+                      defaultValue={generatedBlocks.agents[editingBlock.index]?.objective}
+                      onChange={(e) => {
+                        const updated = { ...generatedBlocks.agents[editingBlock.index], objective: e.target.value };
+                        handleSaveBlockEdit('agent', editingBlock.index, updated);
+                      }}
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:border-teal resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1">Autonomy Level</label>
+                    <select
+                      defaultValue={generatedBlocks.agents[editingBlock.index]?.autonomy}
+                      onChange={(e) => {
+                        const updated = { ...generatedBlocks.agents[editingBlock.index], autonomy: e.target.value };
+                        handleSaveBlockEdit('agent', editingBlock.index, updated);
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:border-teal bg-white"
+                    >
+                      <option value="supervised">Supervised</option>
+                      <option value="assisted">Assisted</option>
+                      <option value="autonomous">Autonomous</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {editingBlock.type === 'sop' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1">Name</label>
+                    <input
+                      type="text"
+                      defaultValue={generatedBlocks.sops[editingBlock.index]?.name}
+                      onChange={(e) => {
+                        const updated = { ...generatedBlocks.sops[editingBlock.index], name: e.target.value };
+                        handleSaveBlockEdit('sop', editingBlock.index, updated);
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:border-teal"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1">Description</label>
+                    <textarea
+                      defaultValue={generatedBlocks.sops[editingBlock.index]?.description}
+                      onChange={(e) => {
+                        const updated = { ...generatedBlocks.sops[editingBlock.index], description: e.target.value };
+                        handleSaveBlockEdit('sop', editingBlock.index, updated);
+                      }}
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:border-teal resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1">Category</label>
+                    <select
+                      defaultValue={generatedBlocks.sops[editingBlock.index]?.category}
+                      onChange={(e) => {
+                        const updated = { ...generatedBlocks.sops[editingBlock.index], category: e.target.value };
+                        handleSaveBlockEdit('sop', editingBlock.index, updated);
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:border-teal bg-white"
+                    >
+                      <option value="Sales">Sales</option>
+                      <option value="Finance">Finance</option>
+                      <option value="HR">HR</option>
+                      <option value="Support">Support</option>
+                      <option value="Operations">Operations</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mt-6 pt-4 border-t border-border-light">
+                <button
+                  onClick={() => handleDeleteBlock(editingBlock.type, editingBlock.index)}
+                  className="px-3 py-1.5 text-sm text-rust hover:text-rust-dark transition-colors"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setEditingBlock(null)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-teal rounded-lg hover:bg-teal-dark transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ============================================
+  // AI AGENT CREATOR VIEW
+  // ============================================
+
+  const AIAgentCreatorView = () => {
+    const isEditMode = editingAgent !== null;
+
+    const triggerOptionsList = [
+      { id: 'new-lead', label: 'New lead arrives in CRM', icon: '📥' },
+      { id: 'schedule-daily', label: 'Scheduled (daily)', icon: '📅' },
+      { id: 'schedule-weekly', label: 'Scheduled (weekly)', icon: '📆' },
+      { id: 'manual', label: 'Manual trigger only', icon: '👆' },
+      { id: 'form-submission', label: 'On form submission', icon: '📝' },
+      { id: 'email-received', label: 'Email received', icon: '📧' }
+    ];
+
+    const [messages, setMessages] = useState(() => {
+      if (isEditMode) {
+        return [{
+          role: 'assistant',
+          content: `Here's your current configuration for **${editingAgent.name}**. Click any field in the preview to edit it, or tell me what you'd like to change.`,
+          type: 'review'
+        }];
+      }
+      return [{
+        role: 'assistant',
+        content: "Hi! I'm here to help you create a new AI agent. Describe what you want this agent to do — what task or process should it handle?",
+        type: 'greeting'
+      }];
+    });
+
+    const [inputValue, setInputValue] = useState('');
+    const [phase, setPhase] = useState(isEditMode ? 'review' : 'greeting');
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [selectedOptions, setSelectedOptions] = useState([]);
+    const [toolsAndSopsSubPhase, setToolsAndSopsSubPhase] = useState('tools');
+    const messagesEndRef = useRef(null);
+
+    const [agent, setAgent] = useState(() => {
+      if (isEditMode) {
+        return {
+          name: editingAgent.name || '',
+          objective: editingAgent.objective || '',
+          autonomy: editingAgent.autonomy || 'supervised',
+          instructions: editingAgent.instructions || [''],
+          triggers: editingAgent.triggers || [],
+          tools: editingAgent.tools || [],
+          sops: editingAgent.sops || []
+        };
+      }
+      return {
+        name: '',
+        objective: '',
+        autonomy: 'supervised',
+        instructions: [],
+        triggers: [],
+        tools: [],
+        sops: []
+      };
+    });
+
+    const [editingField, setEditingField] = useState(null);
+    const [completedPhases, setCompletedPhases] = useState(
+      isEditMode ? new Set(['greeting', 'autonomy_level', 'triggers', 'tools', 'sops']) : new Set()
+    );
+    const [matchedPattern, setMatchedPattern] = useState(null);
+    const [editingSection, setEditingSection] = useState(null); // 'triggers' | 'tools' | 'sops' | null
+    const [pickerSelections, setPickerSelections] = useState([]);
+
+    useEffect(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
+
+    // Handle free-text input (greeting/objective phase)
+    const handleSendMessage = async (text) => {
+      if (!text.trim() || isProcessing) return;
+
+      setMessages(prev => [...prev, { role: 'user', content: text }]);
+      setInputValue('');
+      setIsProcessing(true);
+
+      await new Promise(r => setTimeout(r, 800));
+
+      if (phase === 'greeting') {
+        const matched = matchAgentObjective(text);
+        setMatchedPattern(matched);
+
+        setAgent({
+          name: matched.suggestedName,
+          objective: text,
+          autonomy: 'supervised',
+          instructions: matched.suggestedInstructions,
+          triggers: [],
+          tools: [],
+          sops: []
+        });
+
+        setCompletedPhases(prev => new Set([...prev, 'greeting']));
+
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `I've drafted a **${matched.suggestedName}** agent with ${matched.suggestedInstructions.length} instruction steps. You can see the preview on the right — click any field to edit it.\n\nHow much independence should this agent have?`,
+          type: 'question',
+          questionType: 'single-select',
+          options: [
+            { id: 'supervised', label: 'Supervised', icon: '👀', description: 'Human approves all agent actions' },
+            { id: 'assisted', label: 'Assisted', icon: '🤝', description: 'Agent escalates complex decisions' },
+            { id: 'autonomous', label: 'Autonomous', icon: '🚀', description: 'Agent works independently within bounds' }
+          ]
+        }]);
+
+        setPhase('autonomy_level');
+        setIsProcessing(false);
+        return;
+      }
+
+      // In review/edit mode, handle natural language change requests
+      if (phase === 'review') {
+        const lower = text.toLowerCase();
+        if (lower.includes('autonomy') || lower.includes('independence') || lower.includes('supervised') || lower.includes('assisted') || lower.includes('autonomous')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Sure, pick the new autonomy level:',
+            type: 'question',
+            questionType: 'single-select',
+            options: [
+              { id: 'supervised', label: 'Supervised', icon: '👀', description: 'Human approves all agent actions' },
+              { id: 'assisted', label: 'Assisted', icon: '🤝', description: 'Agent escalates complex decisions' },
+              { id: 'autonomous', label: 'Autonomous', icon: '🚀', description: 'Agent works independently within bounds' }
+            ]
+          }]);
+          setPhase('autonomy_level');
+        } else if (lower.includes('trigger')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Select the triggers for this agent:',
+            type: 'question',
+            questionType: 'multi-select',
+            options: triggerOptionsList.map(t => ({ ...t, description: '' }))
+          }]);
+          setSelectedOptions([...agent.triggers]);
+          setPhase('triggers');
+        } else if (lower.includes('tool')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Select the tools this agent should use:',
+            type: 'question',
+            questionType: 'multi-select',
+            options: availableTools.map(t => ({ id: t.id, label: t.name, icon: t.icon, description: t.category }))
+          }]);
+          setSelectedOptions([...agent.tools]);
+          setToolsAndSopsSubPhase('tools');
+          setPhase('tools_and_sops');
+        } else if (lower.includes('sop') || lower.includes('procedure')) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Select the SOPs this agent should follow:',
+            type: 'question',
+            questionType: 'multi-select-sops',
+            options: sopLibrary.map(s => ({ id: s.id, label: s.name, icon: '📋', description: `${s.steps} steps · ${s.category}` }))
+          }]);
+          setSelectedOptions([...agent.sops]);
+          setToolsAndSopsSubPhase('sops');
+          setPhase('tools_and_sops');
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: "You can click any field in the preview to edit it directly. Or tell me specifically what you'd like to change — like \"change the autonomy level\" or \"update the triggers\".",
+            type: 'info'
+          }]);
+        }
+        setIsProcessing(false);
+        return;
+      }
+
+      setIsProcessing(false);
+    };
+
+    // Handle single-select option click
+    const handleOptionSelect = async (optionId) => {
+      if (phase === 'autonomy_level') {
+        const labels = { supervised: 'Supervised', assisted: 'Assisted', autonomous: 'Autonomous' };
+        setAgent(prev => ({ ...prev, autonomy: optionId }));
+        setCompletedPhases(prev => new Set([...prev, 'autonomy_level']));
+        setMessages(prev => [...prev, { role: 'user', content: labels[optionId] }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to triggers
+        setPhase('triggers');
+        setSelectedOptions(matchedPattern?.suggestedTriggers || []);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'What should trigger this agent to run? Select all that apply:',
+          type: 'question',
+          questionType: 'multi-select',
+          options: triggerOptionsList.map(t => ({
+            ...t,
+            description: '',
+            recommended: (matchedPattern?.suggestedTriggers || []).includes(t.id)
+          }))
+        }]);
+        setIsProcessing(false);
+
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'tools') {
+        setSelectedOptions(prev =>
+          prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+        );
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'sops') {
+        setSelectedOptions(prev =>
+          prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+        );
+      } else if (phase === 'triggers') {
+        setSelectedOptions(prev =>
+          prev.includes(optionId) ? prev.filter(id => id !== optionId) : [...prev, optionId]
+        );
+      }
+    };
+
+    // Handle multi-select confirm
+    const handleConfirmSelection = async () => {
+      if (phase === 'triggers') {
+        setAgent(prev => ({ ...prev, triggers: selectedOptions }));
+        setCompletedPhases(prev => new Set([...prev, 'triggers']));
+        const triggerNames = selectedOptions.map(id => triggerOptionsList.find(t => t.id === id)?.label || id).join(', ');
+        setMessages(prev => [...prev, { role: 'user', content: triggerNames || 'No triggers selected' }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to tools
+        setPhase('tools_and_sops');
+        setToolsAndSopsSubPhase('tools');
+        setSelectedOptions(matchedPattern?.suggestedTools || []);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Which tools should this agent have access to?',
+          type: 'question',
+          questionType: 'multi-select',
+          options: availableTools.map(t => ({
+            id: t.id,
+            label: t.name,
+            icon: t.icon,
+            description: t.category,
+            recommended: (matchedPattern?.suggestedTools || []).includes(t.id)
+          }))
+        }]);
+        setIsProcessing(false);
+
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'tools') {
+        setAgent(prev => ({ ...prev, tools: selectedOptions }));
+        setCompletedPhases(prev => new Set([...prev, 'tools']));
+        const toolNames = selectedOptions.map(id => availableTools.find(t => t.id === id)?.name || id).join(', ');
+        setMessages(prev => [...prev, { role: 'user', content: toolNames || 'No tools selected' }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 600));
+
+        // Move to SOPs
+        setToolsAndSopsSubPhase('sops');
+        setSelectedOptions(matchedPattern?.suggestedSOPs || []);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: 'Which SOPs should this agent follow?',
+          type: 'question',
+          questionType: 'multi-select-sops',
+          options: sopLibrary.map(s => ({
+            id: s.id,
+            label: s.name,
+            icon: '📋',
+            description: `${s.steps} steps · ${s.category}`,
+            recommended: (matchedPattern?.suggestedSOPs || []).includes(s.id)
+          }))
+        }]);
+        setIsProcessing(false);
+
+      } else if (phase === 'tools_and_sops' && toolsAndSopsSubPhase === 'sops') {
+        setAgent(prev => ({ ...prev, sops: selectedOptions }));
+        setCompletedPhases(prev => new Set([...prev, 'sops']));
+        const sopNames = selectedOptions.map(id => sopLibrary.find(s => s.id === id)?.name || id).join(', ');
+        setMessages(prev => [...prev, { role: 'user', content: sopNames || 'No SOPs selected' }]);
+        setIsProcessing(true);
+        await new Promise(r => setTimeout(r, 800));
+
+        // Move to review
+        setPhase('review');
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `Your agent is ready! I've configured **${agent.name}** with ${agent.instructions.length} instructions.\n\nReview everything in the preview panel — click any field to edit it. When you're satisfied, hit **${isEditMode ? 'Save Changes' : 'Create Agent'}** below.`,
+          type: 'review'
+        }]);
+        setIsProcessing(false);
+      }
+    };
+
+    // Save agent
+    const handleSaveAgent = () => {
+      const agentData = {
+        ...agent,
+        id: isEditMode ? editingAgent.id : Date.now(),
+        status: isEditMode ? editingAgent.status : 'idle',
+        approvalRate: isEditMode ? editingAgent.approvalRate : 0,
+        tasksCompleted: isEditMode ? editingAgent.tasksCompleted : 0,
+        project: isEditMode ? editingAgent.project : '',
+        instructions: agent.instructions.filter(i => i.trim())
+      };
+
+      if (isEditMode) {
+        showToast(`Agent "${agentData.name}" updated successfully`, 'success');
+        setSelectedAgent(agentData);
+        setCurrentView('agent-detail');
+      } else {
+        showToast(`Agent "${agentData.name}" created successfully`, 'success');
+        setCurrentView('building-blocks-agents');
+      }
+      setEditingAgent(null);
+    };
+
+    // Inline edit handlers for preview
+    const handleInlineEdit = (field, value) => {
+      setAgent(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleInstructionEdit = (index, value) => {
+      setAgent(prev => {
+        const newInstructions = [...prev.instructions];
+        newInstructions[index] = value;
+        return { ...prev, instructions: newInstructions };
+      });
+    };
+
+    const handleAddInstruction = () => {
+      setAgent(prev => ({ ...prev, instructions: [...prev.instructions, ''] }));
+    };
+
+    const handleRemoveInstruction = (index) => {
+      if (agent.instructions.length > 1) {
+        setAgent(prev => ({ ...prev, instructions: prev.instructions.filter((_, i) => i !== index) }));
+      }
+    };
+
+    // Picker dialog handlers for editing Triggers/Tools/SOPs from preview
+    const handlePickerToggle = (id) => {
+      setPickerSelections(prev =>
+        prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+      );
+    };
+
+    const handlePickerSave = () => {
+      if (editingSection === 'triggers') {
+        setAgent(prev => ({ ...prev, triggers: pickerSelections }));
+      } else if (editingSection === 'tools') {
+        setAgent(prev => ({ ...prev, tools: pickerSelections }));
+      } else if (editingSection === 'sops') {
+        setAgent(prev => ({ ...prev, sops: pickerSelections }));
+      }
+      setEditingSection(null);
+      setPickerSelections([]);
+    };
+
+    const handlePickerClose = () => {
+      setEditingSection(null);
+      setPickerSelections([]);
+    };
+
+    const getPickerItems = () => {
+      if (editingSection === 'triggers') {
+        return triggerOptionsList.map(t => ({ id: t.id, label: t.label, icon: t.icon, description: '' }));
+      } else if (editingSection === 'tools') {
+        return availableTools.map(t => ({ id: t.id, label: t.name, icon: t.icon, description: t.category }));
+      } else if (editingSection === 'sops') {
+        return sopLibrary.map(s => ({ id: s.id, label: s.name, icon: '📋', description: `${s.steps} steps · ${s.category}` }));
+      }
+      return [];
+    };
+
+    const getPickerTitle = () => {
+      if (editingSection === 'triggers') return 'Edit Triggers';
+      if (editingSection === 'tools') return 'Edit Tools';
+      if (editingSection === 'sops') return 'Edit SOPs';
+      return '';
+    };
+
+    const quickSuggestions = [
+      'Qualify incoming sales leads',
+      'Process and validate invoices',
+      'Triage customer support tickets',
+      'Send personalized outreach emails',
+      'Track and sync pipeline data',
+      'Coordinate new hire onboarding'
+    ];
+
+    return (
+      <div className="flex-1 flex bg-cream-light overflow-hidden">
+        {/* Left Panel - Conversation */}
+        <div className="w-2/5 flex flex-col border-r border-border-light bg-white">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border-light">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setEditingAgent(null);
+                    setCurrentView('building-blocks-agents');
+                  }}
+                  className="p-1.5 text-muted hover:text-charcoal rounded-lg hover:bg-cream transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <div>
+                  <h1 className="text-lg font-semibold text-charcoal">{isEditMode ? 'Edit Agent' : 'Create Agent'}</h1>
+                  <p className="text-xs text-muted">AI-assisted setup</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingAgent(null);
+                  setCurrentView(isEditMode ? 'agent-edit' : 'agent-create');
+                }}
+                className="text-xs text-muted hover:text-charcoal transition-colors"
+              >
+                Switch to manual mode →
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'assistant' ? (
+                  <div className="max-w-[90%] space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-teal to-sage flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs">✨</span>
+                      </div>
+                      <div className="bg-cream rounded-2xl rounded-tl-sm px-4 py-2.5">
+                        <p className="text-sm text-charcoal whitespace-pre-wrap">
+                          {msg.content.split('**').map((part, j) =>
+                            j % 2 === 1 ? <strong key={j}>{part}</strong> : part
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Single-select question */}
+                    {msg.type === 'question' && msg.questionType === 'single-select' && (
+                      <div className="ml-9 space-y-2">
+                        {msg.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleOptionSelect(opt.id)}
+                            className="w-full p-3 rounded-xl border border-border-light hover:border-teal hover:bg-teal-tint/30 text-left transition-all bg-white"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg">{opt.icon}</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">{opt.label}</div>
+                                <div className="text-xs text-muted">{opt.description}</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Multi-select question */}
+                    {msg.type === 'question' && (msg.questionType === 'multi-select' || msg.questionType === 'multi-select-sops') && (
+                      <div className="ml-9 space-y-2">
+                        {msg.options.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleOptionSelect(opt.id)}
+                            className={`w-full p-3 rounded-xl border text-left transition-all ${
+                              selectedOptions.includes(opt.id)
+                                ? 'border-teal bg-teal-tint'
+                                : 'border-border-light hover:border-border bg-white'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{opt.icon}</span>
+                                <div>
+                                  <div className="text-sm font-medium text-charcoal">
+                                    {opt.label}
+                                    {opt.recommended && (
+                                      <span className="ml-2 px-1.5 py-0.5 bg-sage-tint text-sage text-xs rounded">
+                                        Recommended
+                                      </span>
+                                    )}
+                                  </div>
+                                  {opt.description && <div className="text-xs text-muted">{opt.description}</div>}
+                                </div>
+                              </div>
+                              <span className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                selectedOptions.includes(opt.id) ? 'border-teal bg-teal' : 'border-border'
+                              }`}>
+                                {selectedOptions.includes(opt.id) && (
+                                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                        {/* SOP Marketplace button */}
+                        {msg.questionType === 'multi-select-sops' && (
+                          <button
+                            className="w-full p-3 rounded-xl border border-dashed border-border text-left transition-all hover:border-sage hover:bg-sage-tint/20"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🏪</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">Browse SOP Marketplace</div>
+                                <div className="text-xs text-muted">Discover pre-built SOPs from the community</div>
+                              </div>
+                            </div>
+                          </button>
+                        )}
+                        <button
+                          onClick={handleConfirmSelection}
+                          className="w-full mt-2 px-4 py-2 text-sm font-medium text-white bg-teal rounded-lg hover:bg-teal-dark transition-colors"
+                        >
+                          Continue{selectedOptions.length > 0 ? ` with ${selectedOptions.length} selected` : ''}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="max-w-[80%] bg-charcoal text-white rounded-2xl rounded-br-sm px-4 py-2.5">
+                    <p className="text-sm">{msg.content}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Processing indicator */}
+            {isProcessing && (
+              <div className="flex items-center gap-2 p-3">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-teal rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                <span className="text-sm text-muted">Thinking...</span>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area */}
+          <div className="p-4 border-t border-border-light">
+            {/* Quick suggestions at start */}
+            {phase === 'greeting' && messages.length === 1 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {quickSuggestions.map((suggestion, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setInputValue(suggestion)}
+                    className="px-3 py-1.5 text-xs bg-cream-dark rounded-full hover:bg-cream text-charcoal-light transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {phase === 'review' ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
+                    placeholder="Tell me what to change..."
+                    className="flex-1 px-4 py-2.5 text-sm border border-border-light rounded-xl focus:outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+                  />
+                  <button
+                    onClick={() => handleSendMessage(inputValue)}
+                    disabled={!inputValue.trim()}
+                    className="px-4 py-2.5 bg-charcoal-light text-white rounded-xl hover:bg-charcoal disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  onClick={handleSaveAgent}
+                  className="w-full px-4 py-3 text-sm font-medium text-white bg-sage rounded-xl hover:bg-sage-dark transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>🚀</span> {isEditMode ? 'Save Changes' : 'Create Agent'}
+                </button>
+              </div>
+            ) : phase === 'greeting' ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(inputValue)}
+                  placeholder="Describe what this agent should do..."
+                  className="flex-1 px-4 py-2.5 text-sm border border-border-light rounded-xl focus:outline-none focus:border-teal focus:ring-1 focus:ring-teal/30"
+                />
+                <button
+                  onClick={() => handleSendMessage(inputValue)}
+                  disabled={!inputValue.trim() || isProcessing}
+                  className="px-4 py-2.5 bg-teal text-white rounded-xl hover:bg-teal-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="text-center text-sm text-muted py-2">
+                Select an option above to continue
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel - Agent Preview */}
+        <div className="flex-1 p-6 overflow-y-auto relative">
+          <div className="max-w-xl mx-auto">
+            {agent.name ? (
+              <div className="space-y-4">
+                {/* Agent Header Card */}
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 bg-teal-tint rounded-xl flex items-center justify-center flex-shrink-0">
+                      <span className="text-2xl">🤖</span>
+                    </div>
+                    <div className="flex-1">
+                      {editingField === 'name' ? (
+                        <input
+                          type="text"
+                          value={agent.name}
+                          onChange={(e) => handleInlineEdit('name', e.target.value)}
+                          onBlur={() => setEditingField(null)}
+                          onKeyDown={(e) => e.key === 'Enter' && setEditingField(null)}
+                          autoFocus
+                          className="text-xl font-semibold text-charcoal w-full px-2 py-1 -ml-2 border border-teal rounded-lg focus:outline-none"
+                        />
+                      ) : (
+                        <h2
+                          onClick={() => setEditingField('name')}
+                          className="text-xl font-semibold text-charcoal cursor-pointer hover:text-teal transition-colors"
+                        >
+                          {agent.name}
+                        </h2>
+                      )}
+
+                      {editingField === 'objective' ? (
+                        <textarea
+                          value={agent.objective}
+                          onChange={(e) => handleInlineEdit('objective', e.target.value)}
+                          onBlur={() => setEditingField(null)}
+                          autoFocus
+                          rows={2}
+                          className="text-sm text-muted mt-1 w-full px-2 py-1 -ml-2 border border-teal rounded-lg focus:outline-none resize-none"
+                        />
+                      ) : (
+                        <p
+                          onClick={() => setEditingField('objective')}
+                          className="text-sm text-muted mt-1 cursor-pointer hover:text-charcoal transition-colors"
+                        >
+                          {agent.objective || 'Click to add objective...'}
+                        </p>
+                      )}
+
+                      {/* Autonomy Badge */}
+                      {completedPhases.has('autonomy_level') && (
+                        <div className="mt-3">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                            agent.autonomy === 'autonomous' ? 'bg-sage-tint text-sage' :
+                            agent.autonomy === 'assisted' ? 'bg-amber-light/20 text-amber' :
+                            'bg-cream-dark text-charcoal-light'
+                          }`}>
+                            {agent.autonomy === 'autonomous' ? '🚀' : agent.autonomy === 'assisted' ? '🤝' : '👀'}
+                            {agent.autonomy.charAt(0).toUpperCase() + agent.autonomy.slice(1)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructions Card */}
+                <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                  <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                    <span>📝</span> Instructions ({agent.instructions.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {agent.instructions.map((instruction, i) => (
+                      <div key={i} className="flex items-start gap-2 group">
+                        <span className="text-xs font-medium text-teal mt-2 w-5 text-right flex-shrink-0">{i + 1}.</span>
+                        {editingField === `instruction-${i}` ? (
+                          <input
+                            type="text"
+                            value={instruction}
+                            onChange={(e) => handleInstructionEdit(i, e.target.value)}
+                            onBlur={() => setEditingField(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setEditingField(null)}
+                            autoFocus
+                            className="flex-1 text-sm px-2 py-1 border border-teal rounded-lg focus:outline-none"
+                          />
+                        ) : (
+                          <div className="flex-1 flex items-center gap-1">
+                            <span
+                              onClick={() => setEditingField(`instruction-${i}`)}
+                              className="flex-1 text-sm text-charcoal cursor-pointer hover:text-teal py-1 transition-colors"
+                            >
+                              {instruction || 'Click to edit...'}
+                            </span>
+                            {agent.instructions.length > 1 && (
+                              <button
+                                onClick={() => handleRemoveInstruction(i)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-muted hover:text-rust transition-all"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      onClick={handleAddInstruction}
+                      className="flex items-center gap-1 text-xs text-teal hover:text-teal-dark transition-colors mt-1 ml-7"
+                    >
+                      <span>+</span> Add step
+                    </button>
+                  </div>
+                </div>
+
+                {/* Triggers */}
+                {completedPhases.has('triggers') && (
+                  <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                    <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                      <span>⚡</span> Triggers
+                      <button
+                        onClick={() => { setEditingSection('triggers'); setPickerSelections([...agent.triggers]); }}
+                        className="ml-auto p-1 text-muted hover:text-teal transition-colors"
+                        aria-label="Edit triggers"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </h3>
+                    {agent.triggers.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {agent.triggers.map(triggerId => {
+                          const trigger = triggerOptionsList.find(t => t.id === triggerId);
+                          return trigger ? (
+                            <span key={triggerId} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream rounded-lg text-sm">
+                              <span>{trigger.icon}</span>
+                              <span className="text-charcoal">{trigger.label}</span>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted italic">No triggers selected</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Tools */}
+                {completedPhases.has('tools') && (
+                  <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                    <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                      <span>🔌</span> Tools
+                      <button
+                        onClick={() => { setEditingSection('tools'); setPickerSelections([...agent.tools]); }}
+                        className="ml-auto p-1 text-muted hover:text-teal transition-colors"
+                        aria-label="Edit tools"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </h3>
+                    {agent.tools.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {agent.tools.map(toolId => {
+                          const tool = availableTools.find(t => t.id === toolId);
+                          return tool ? (
+                            <span key={toolId} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cream rounded-lg text-sm">
+                              <span>{tool.icon}</span>
+                              <span className="text-charcoal">{tool.name}</span>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted italic">No tools selected</p>
+                    )}
+                  </div>
+                )}
+
+                {/* SOPs */}
+                {completedPhases.has('sops') && (
+                  <div className="bg-white rounded-xl border border-border-light shadow-soft p-5">
+                    <h3 className="text-sm font-semibold text-charcoal mb-3 flex items-center gap-2">
+                      <span>📋</span> SOPs
+                      <button
+                        onClick={() => { setEditingSection('sops'); setPickerSelections([...agent.sops]); }}
+                        className="ml-auto p-1 text-muted hover:text-teal transition-colors"
+                        aria-label="Edit SOPs"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                    </h3>
+                    {agent.sops.length > 0 ? (
+                      <div className="space-y-2">
+                        {agent.sops.map(sopId => {
+                          const sop = sopLibrary.find(s => s.id === sopId);
+                          return sop ? (
+                            <div key={sopId} className="flex items-center gap-2 p-2 bg-cream rounded-lg">
+                              <span>📋</span>
+                              <div>
+                                <div className="text-sm font-medium text-charcoal">{sop.name}</div>
+                                <div className="text-xs text-muted">{sop.steps} steps · {sop.category}</div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted italic">No SOPs selected</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Empty state */
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <div className="w-16 h-16 bg-cream rounded-2xl flex items-center justify-center mb-4">
+                  <span className="text-3xl opacity-50">🤖</span>
+                </div>
+                <h3 className="text-lg font-medium text-charcoal mb-2">Your agent will appear here</h3>
+                <p className="text-sm text-muted max-w-sm">
+                  Describe what you want this agent to do, and I'll help you configure it step by step.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Picker Dialog Overlay */}
+          {editingSection && (
+            <div className="absolute inset-0 bg-charcoal/20 backdrop-blur-sm flex items-center justify-center p-6 z-10">
+              <div className="bg-white rounded-xl border border-border-light shadow-soft-lg w-full max-w-md max-h-[80vh] flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-border-light">
+                  <h3 className="text-base font-semibold text-charcoal">{getPickerTitle()}</h3>
+                  <button
+                    onClick={handlePickerClose}
+                    className="p-1 text-muted hover:text-charcoal transition-colors"
+                    aria-label="Close picker"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Items */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                  {getPickerItems().map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => handlePickerToggle(item.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                        pickerSelections.includes(item.id)
+                          ? 'border-teal bg-teal-tint/50'
+                          : 'border-border-light hover:border-teal/30 bg-white'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                        pickerSelections.includes(item.id)
+                          ? 'border-teal bg-teal'
+                          : 'border-gray-300'
+                      }`}>
+                        {pickerSelections.includes(item.id) && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className="text-lg flex-shrink-0">{item.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-charcoal">{item.label}</div>
+                        {item.description && (
+                          <div className="text-xs text-muted">{item.description}</div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+
+                  {/* Browse SOP Marketplace button for SOPs picker */}
+                  {editingSection === 'sops' && (
+                    <button className="w-full flex items-center justify-center gap-2 p-3 rounded-lg border-2 border-dashed border-border-light hover:border-teal/30 text-muted hover:text-teal transition-all">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <span className="text-sm font-medium">Browse SOP Marketplace</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-5 py-4 border-t border-border-light flex items-center justify-between">
+                  <span className="text-xs text-muted">{pickerSelections.length} selected</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handlePickerClose}
+                      className="px-4 py-2 text-sm font-medium text-charcoal hover:bg-cream rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePickerSave}
+                      className="px-4 py-2 text-sm font-medium text-white bg-teal hover:bg-teal-dark rounded-lg transition-colors"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   // Project Wizard Component - manages its own state to prevent focus loss
   const ProjectWizard = () => {
     const [step, setStep] = useState(1);
@@ -3704,7 +7397,15 @@ const AgentCommandCenter = () => {
             <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-medium text-charcoal">Add Agents</h2>
-                <button className="text-sm text-teal hover:text-teal-dark">+ Create New Agent</button>
+                <button
+                  onClick={() => {
+                    setEditingAgent(null);
+                    setCurrentView('agent-creator-ai');
+                  }}
+                  className="text-sm text-teal hover:text-teal-dark"
+                >
+                  + Create New Agent
+                </button>
               </div>
               <p className="text-sm text-muted mb-4">Select at least one agent for this project.</p>
               <div className="space-y-3">
@@ -4044,7 +7745,15 @@ const AgentCommandCenter = () => {
         <div className="bg-white rounded-xl border border-border-light shadow-soft p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-charcoal">Add Agents</h2>
-            <button className="text-sm text-teal hover:text-teal-dark">+ Create New Agent</button>
+            <button
+              onClick={() => {
+                setEditingAgent(null);
+                setCurrentView('agent-creator-ai');
+              }}
+              className="text-sm text-teal hover:text-teal-dark"
+            >
+              + Create New Agent
+            </button>
           </div>
 
           <p className="text-sm text-muted mb-4">Select at least one agent for this project. You can change this later.</p>
@@ -4864,7 +8573,40 @@ const AgentCommandCenter = () => {
   // Project Dashboard View
   const ProjectDashboardView = () => {
     const project = selectedProject;
-    if (!project) return null;
+    if (!project) {
+      return (
+        <div className="flex-1 p-6 overflow-auto bg-cream-light">
+          <div className="max-w-2xl mx-auto">
+            <h1 ref={mainHeadingRef} tabIndex={-1} className="text-2xl font-semibold text-charcoal mb-6 outline-none">Project Dashboard</h1>
+            <div className="bg-white rounded-xl border border-border-light shadow-soft">
+              <EmptyState
+                icon="📁"
+                title="No project selected"
+                description="Select a project from the sidebar or create a new one to view its dashboard."
+                primaryAction={() => {
+                  setWizardStep(1);
+                  setNewProject({
+                    name: '',
+                    goal: '',
+                    template: null,
+                    status: 'draft',
+                    agents: [],
+                    sops: [],
+                    tools: [],
+                    people: [],
+                    workflow: { nodes: [], connections: [], triggers: [] }
+                  });
+                  setCurrentView('project-wizard');
+                }}
+                primaryLabel="Create New Project"
+                secondaryAction={() => setCurrentView('command-center')}
+                secondaryLabel="Back to Command Center"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     // Mock data for project dashboard
     const dashboardStats = {
@@ -5487,6 +9229,12 @@ const AgentCommandCenter = () => {
       case 'inbox': return <InboxView />;
       case 'schedule': return <ScheduleView />;
       case 'team': return <TeamView />;
+      case 'team-agents': return <TeamAgentsView />;
+      case 'team-humans': return <TeamHumansView />;
+      // Building Blocks Views
+      case 'building-blocks-agents': return <BuildingBlocksAgentsView />;
+      case 'building-blocks-humans': return <BuildingBlocksHumansView />;
+      case 'building-blocks-sops': return <BuildingBlocksSOPsView />;
       case 'reports': return <ReportsView />;
       case 'activity': return <ActivityView />;
       case 'tools': return <ToolsView />;
@@ -5495,6 +9243,9 @@ const AgentCommandCenter = () => {
       case 'tool-settings': return <ToolSettingsView />;
       case 'project': return <ProjectView />;
       case 'agent-detail': return <AgentDetailView />;
+      case 'agent-create': return <AgentFormView />;
+      case 'agent-edit': return <AgentFormView />;
+      case 'agent-creator-ai': return <AIAgentCreatorView />;
       // Analytics Views
       case 'analytics-performance': return <PerformanceDashboardView />;
       case 'analytics-cost': return <CostEfficiencyView />;
@@ -5507,7 +9258,10 @@ const AgentCommandCenter = () => {
       case 'settings-export': return <ExportSettingsView />;
       // Project Wizard View
       case 'project-wizard': return <ProjectWizard />;
+      // AI Project Creator View
+      case 'project-creator-ai': return <AIProjectCreatorView />;
       // Project Management Views
+      case 'projects-list': return <ProjectsListView />;
       case 'project-dashboard': return <ProjectDashboardView />;
       case 'project-edit': return <ProjectEditView />;
       default: return <CommandCenterView />;
@@ -5607,7 +9361,7 @@ const AgentCommandCenter = () => {
           title="Agent Assistant"
           subtitle="Ready to help"
           placeholder="Ask about agents, projects..."
-          accentColor="emerald"
+          accentColor="sage"
           quickActions={[
             { label: 'Agent status', icon: '🤖' },
             { label: 'Create project', icon: '📁' },
@@ -5619,6 +9373,342 @@ const AgentCommandCenter = () => {
 
       {/* Confirmation Dialog */}
       <ConfirmDialog />
+
+      {/* Create SOP Modal */}
+      {sopModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={handleSopModalClose}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            {/* Input Form State */}
+            {sopModalState === 'input' && (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
+                  <h2 className="text-lg font-semibold text-charcoal">Create SOP</h2>
+                  <button
+                    onClick={handleSopModalClose}
+                    className="p-1 text-muted hover:text-charcoal rounded transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Form Content */}
+                <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-140px)]">
+                  {/* SOP Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1.5">
+                      SOP Name <span className="text-rust">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={sopForm.name}
+                      onChange={(e) => setSopForm(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="e.g., Invoice Processing"
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-sage/30 focus:border-sage"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1.5">
+                      Description
+                    </label>
+                    <textarea
+                      value={sopForm.description}
+                      onChange={(e) => setSopForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="What does this SOP accomplish?"
+                      rows={3}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-sage/30 focus:border-sage resize-none"
+                    />
+                  </div>
+
+                  {/* Category */}
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1.5">
+                      Category
+                    </label>
+                    <select
+                      value={sopForm.category}
+                      onChange={(e) => setSopForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-sage/30 focus:border-sage bg-white"
+                    >
+                      {sopCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* File Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-charcoal mb-1.5">
+                      Reference Documents <span className="text-muted font-normal">(optional)</span>
+                    </label>
+
+                    {/* Drop Zone */}
+                    <div
+                      onClick={() => sopFileInputRef.current?.click()}
+                      className="border-2 border-dashed border-border-light rounded-lg p-6 text-center cursor-pointer hover:border-sage hover:bg-sage-tint/30 transition-colors"
+                    >
+                      <div className="text-2xl mb-2">📄</div>
+                      <p className="text-sm text-charcoal">Drop files here or click to upload</p>
+                      <p className="text-xs text-muted mt-1">PDF, DOCX, TXT up to 10MB</p>
+                    </div>
+                    <input
+                      ref={sopFileInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.docx,.doc,.txt"
+                      onChange={handleSopFileUpload}
+                      className="hidden"
+                    />
+
+                    {/* Uploaded Files List */}
+                    {sopForm.files.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {sopForm.files.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between bg-cream rounded-lg px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">📄</span>
+                              <span className="text-sm text-charcoal truncate max-w-[300px]">{file.name}</span>
+                            </div>
+                            <button
+                              onClick={() => removeSopFile(index)}
+                              className="p-1 text-muted hover:text-rust rounded transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light bg-cream-light">
+                  <button
+                    onClick={handleSopModalClose}
+                    className="px-4 py-2 text-sm text-charcoal-light hover:text-charcoal transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSopGenerate}
+                    disabled={!sopForm.name.trim()}
+                    className="px-4 py-2 text-sm font-medium text-white bg-sage rounded-lg hover:bg-sage-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                  >
+                    Generate SOP
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Processing State */}
+            {sopModalState === 'processing' && (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
+                  <h2 className="text-lg font-semibold text-charcoal">Generating SOP</h2>
+                </div>
+
+                {/* Progress Content */}
+                <div className="p-6 py-12">
+                  {/* Progress Steps */}
+                  <div className="flex items-center justify-center mb-8">
+                    {sopProcessingSteps.map((step, index) => (
+                      <React.Fragment key={index}>
+                        <div className="flex flex-col items-center">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                            index < sopProcessingStep
+                              ? 'bg-sage text-white'
+                              : index === sopProcessingStep
+                                ? 'bg-sage text-white animate-pulse'
+                                : 'bg-border-light text-muted'
+                          }`}>
+                            {index < sopProcessingStep ? '✓' : step.icon}
+                          </div>
+                          <span className={`text-xs mt-2 ${
+                            index <= sopProcessingStep ? 'text-charcoal' : 'text-muted'
+                          }`}>
+                            {step.label}
+                          </span>
+                        </div>
+                        {index < sopProcessingSteps.length - 1 && (
+                          <div className={`w-16 h-0.5 mx-2 transition-colors ${
+                            index < sopProcessingStep ? 'bg-sage' : 'bg-border-light'
+                          }`} />
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+
+                  {/* Current Step Indicator */}
+                  <div className="text-center">
+                    <div className="inline-flex items-center gap-2 bg-cream rounded-lg px-4 py-3">
+                      <div className="w-5 h-5 border-2 border-sage border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm text-charcoal">
+                        {sopProcessingSteps[Math.min(sopProcessingStep, sopProcessingSteps.length - 1)]?.label}...
+                      </span>
+                    </div>
+                    {sopForm.files.length > 0 && (
+                      <p className="text-xs text-muted mt-3">
+                        Processing {sopForm.files.length} file{sopForm.files.length > 1 ? 's' : ''}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end px-6 py-4 border-t border-border-light bg-cream-light">
+                  <button
+                    onClick={handleSopModalClose}
+                    className="px-4 py-2 text-sm text-charcoal-light hover:text-charcoal transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Review State */}
+            {sopModalState === 'review' && generatedSop && (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-border-light">
+                  <h2 className="text-lg font-semibold text-charcoal">Review SOP</h2>
+                  <button
+                    onClick={handleSopModalClose}
+                    className="p-1 text-muted hover:text-charcoal rounded transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Review Content */}
+                <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-140px)]">
+                  {/* Success Message */}
+                  <div className="flex items-center gap-2 text-sage">
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    <span className="text-sm font-medium">SOP Generated Successfully</span>
+                  </div>
+
+                  {/* SOP Summary Card */}
+                  <div className="bg-cream rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 bg-sage-tint rounded-lg flex items-center justify-center">
+                        <span className="text-xl">📋</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-charcoal">{generatedSop.name}</h3>
+                        <p className="text-sm text-muted mt-0.5">{generatedSop.description}</p>
+                        <p className="text-xs text-muted mt-1">Category: {generatedSop.category}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Steps */}
+                  <div>
+                    <h4 className="text-sm font-medium text-charcoal mb-2">
+                      Steps ({generatedSop.steps.length})
+                    </h4>
+                    <div className="bg-cream rounded-lg p-3 space-y-2">
+                      {generatedSop.steps.map((step, index) => (
+                        <div key={step.id} className="flex gap-3 text-sm">
+                          <span className="text-sage font-medium">{index + 1}.</span>
+                          <span className="text-charcoal">{step.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Inputs & Outputs */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-charcoal mb-2">Inputs</h4>
+                      <div className="bg-cream rounded-lg p-3">
+                        <ul className="text-sm text-charcoal space-y-1">
+                          {generatedSop.inputs.map((input, i) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-sage" />
+                              {input.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium text-charcoal mb-2">Outputs</h4>
+                      <div className="bg-cream rounded-lg p-3">
+                        <ul className="text-sm text-charcoal space-y-1">
+                          {generatedSop.outputs.map((output, i) => (
+                            <li key={i} className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-teal" />
+                              {output.name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tools */}
+                  <div>
+                    <h4 className="text-sm font-medium text-charcoal mb-2">Recommended Tools</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {availableTools.filter(t => generatedSop.tools.includes(t.id)).map(tool => (
+                        <span key={tool.id} className="inline-flex items-center gap-1.5 bg-cream rounded-lg px-3 py-1.5 text-sm">
+                          <span>{tool.icon}</span>
+                          <span className="text-charcoal">{tool.name}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border-light bg-cream-light">
+                  <button
+                    onClick={handleSopModalClose}
+                    className="px-4 py-2 text-sm text-rust hover:text-rust-dark transition-colors"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={handleSopEditDetails}
+                    className="px-4 py-2 text-sm text-charcoal-light hover:text-charcoal transition-colors"
+                  >
+                    Edit Details
+                  </button>
+                  <button
+                    onClick={handleSopSave}
+                    className="px-4 py-2 text-sm font-medium text-white bg-sage rounded-lg hover:bg-sage-dark transition-colors"
+                  >
+                    Save SOP
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Toast Notifications */}
       <Toast />
